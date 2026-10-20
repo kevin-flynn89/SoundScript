@@ -1,0 +1,26 @@
+{
+  "id": "/SoundScript/",
+  "name": "SoundScript",
+  "short_name": "SoundScript",
+  "description": "Trascrivi e riassumi i messaggi vocali.",
+  "start_url": "/SoundScript/",
+  "scope": "/SoundScript/",
+  "display": "standalone",
+  "background_color": "#0b1020",
+  "theme_color": "#4f46e5",
+  "icons": [
+    { "src": "/SoundScript/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/SoundScript/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/SoundScript/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    { "src": "/SoundScript/screenshots/wide.png", "sizes": "1280x800", "type": "image/png", "form_factor": "wide", "label": "SoundScript su desktop" },
+    { "src": "/SoundScript/screenshots/narrow.png", "sizes": "720x1280", "type": "image/png", "form_factor": "narrow", "label": "SoundScript su mobile" }
+  ],
+  "share_target": {
+    "action": "/SoundScript/share-target.html",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": { "files": [ { "name": "audio", "accept": ["audio/*"] } ] }
+  }
+}
