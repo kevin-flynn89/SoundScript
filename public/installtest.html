@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SoundScript - Test Installazione</title>
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#4f46e5">
+  <style>
+    body{font-family:system-ui,sans-serif;margin:20px;background:#0b1020;color:#f1f5f9;text-align:center}
+    h1{font-size:24px;margin:20px 0}
+    #installBtn{padding:20px 40px;font-size:18px;font-weight:bold;background:linear-gradient(135deg,#4f46e5,#06b6d4);color:white;border:none;border-radius:12px;cursor:pointer;box-shadow:0 4px 20px rgba(79,70,229,0.4)}
+    #installBtn:disabled{opacity:0.3;cursor:not-allowed}
+    #status{margin-top:20px;padding:16px;background:#141a2e;border-radius:8px;font-size:14px;text-align:left}
+  </style>
+</head>
+<body>
+  <h1>SoundScript - Test Installazione</h1>
+  <p style="color:#94a3b8;margin-bottom:30px">
+    Tocca il pulsante verde per installare l'app.<br>
+    Se il pulsante è disabilitato, Chrome ritiene che l'app non sia installabile.
+  </p>
+  
+  <button id="installBtn" disabled>INSTALLA ORA</button>
+  
+  <div id="status">
+    <strong>Stato:</strong> Attendi il caricamento...
+  </div>
+
+  <script>
+    const status = document.getElementById('status');
+    const btn = document.getElementById('installBtn');
+    let deferredPrompt = null;
+
+    function log(msg) {
+      status.innerHTML = '<strong>Stato:</strong> ' + msg;
+      console.log('[Install Test]', msg);
+    }
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      btn.disabled = false;
+      log('✅ App INSTALLABILE! Tocca il pulsante verde.');
+    });
+
+    window.addEventListener('appinstalled', () => {
+      log('✅ APP INSTALLATA CON SUCCESSO!');
+      btn.disabled = true;
+      btn.textContent = 'INSTALLATA ✓';
+    });
+
+    btn.addEventListener('click', async () => {
+      if (!deferredPrompt) {
+        log('❌ Nessun prompt disponibile');
+        return;
+      }
+      
+      log('Apro finestra di installazione...');
+      deferredPrompt.prompt();
+      
+      const { outcome } = await deferredPrompt.userChoice;
+      log('Esito: ' + outcome);
+      
+      if (outcome === 'accepted') {
+        btn.textContent = 'INSTALLATA ✓';
+      }
+      
+      deferredPrompt = null;
+    });
+
+    // Controlla se già installata
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      log('✅ App già installata sul dispositivo');
+      btn.textContent = 'GIÀ INSTALLATA ✓';
+    }
+
+    // Timeout diagnostico
+    setTimeout(() => {
+      if (btn.disabled && !window.matchMedia('(display-mode: standalone)').matches) {
+        log('❌ Chrome NON ha attivato beforeinstallprompt dopo 5 secondi. L\'app è considerata NON installabile da questo browser. Apri DevTools (chrome://inspect) per vedere i dettagli.');
+      }
+    }, 5000);
+
+    log('Inizializzazione...');
+  </script>
+</body>
+</html>
