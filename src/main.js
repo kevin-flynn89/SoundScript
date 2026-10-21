@@ -19,9 +19,10 @@ let activeModel = null;
 
 let draftKeys = null;
 let chainDirty = false;
+let providerChoice = "openai";
 const modelCache = {};
 
-/* ===== Regole TL;DR personalizzabili ===== */
+/* ===== Regole TL;DR ===== */
 const TLR_LEN = {
   breve: "Massimo 1 frase.",
   medio: "Massimo 3 frasi.",
@@ -95,7 +96,7 @@ function composeInstruction(t) {
   return p;
 }
 
-/* ===== Ultimi errori per chiave ===== */
+/* ===== Ultimi errori ===== */
 function loadLastErrors() {
   try { return JSON.parse(localStorage.getItem(LASTERR_KEY) || "{}"); }
   catch { return {}; }
@@ -119,6 +120,43 @@ function describeError(err) {
   return "errore di rete o CORS";
 }
 
+/* ===== Suggerimento modelli valutato dalla PWA ===== */
+function suggestModel(list, slot, provider) {
+  const p = PROVIDERS[provider] || PROVIDERS.openai;
+  const rec = slot === "stt" ? p.recommended.stt : p.recommended.llm;
+  if (list.some((m) => m.id === rec)) return rec;
+  if (slot === "stt") {
+    const pref = list.find((m) => /turbo|v3|large|whisper|transcribe/i.test(m.id));
+    if (pref) return pref.id;
+  } else {
+    const pref = list.find((m) => /flash-lite|flash|mini|instant|lite|nano|small/i.test(m.id));
+    if (pref) return pref.id;
+  }
+  return list[0]?.id || "";
+}
+function entrySugg(entry, slot) {
+  if (slot === "stt" && entry.suggStt) return entry.suggStt;
+  if (slot === "llm" && entry.suggLlm) return entry.suggLlm;
+  const cls = modelCache[entry.id];
+  if (cls) return suggestModel(slot === "stt" ? cls.stt : cls.chat, slot, entry.provider);
+  const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
+  return slot === "stt" ? p.recommended.stt : p.recommended.llm;
+}
+async function ensureModels(entry, force) {
+  if (!force && modelCache[entry.id]) return modelCache[entry.id];
+  const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
+  const models = await listModels(entry);
+  const cls = classifyModels(models, p.family);
+  modelCache[entry.id] = cls;
+  return cls;
+}
+function applySuggFromCache(entry) {
+  const cls = modelCache[entry.id];
+  if (!cls) return;
+  if (!entry.suggStt) entry.suggStt = suggestModel(cls.stt, "stt", entry.provider);
+  if (!entry.suggLlm) entry.suggLlm = suggestModel(cls.chat, "llm", entry.provider);
+}
+
 function stat(message, percent) {
   const status = $("#status");
   const bar = $("#bar");
@@ -134,6 +172,64 @@ const LOGO_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path d="M12 19v3M9 22h6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
 </svg>`;
 const EQ_HTML = `<div class="equalizer" id="eq" hidden><span></span><span></span><span></span><span></span><span></span></div>`;
+const CHEV_SVG = `<svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>`;
+const TICK_SVG = `<svg class="tick" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M378-246 154-470l43-43 181 181 384-384 43 43-427 427Z"/></svg>`;
+
+/* ===== Menu a tendina custom ===== */
+function closeAllDD() {
+  document.querySelectorAll(".dd.open").forEach((d) => {
+    d.classList.remove("open");
+    const m = d.querySelector(".dd-menu"); if (m) m.hidden = true;
+    const b = d.querySelector(".dd-btn"); if (b) b.setAttribute("aria-expanded", "false");
+  });
+}
+document.addEventListener("click", () => closeAllDD());
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeAllDD(); });
+
+function makeDropdown(host, opts) {
+  host.innerHTML = "";
+  host.classList.add("dd");
+  const btn = document.createElement("button");
+  btn.type = "button"; btn.className = "dd-btn";
+  btn.setAttribute("aria-haspopup", "listbox");
+  btn.setAttribute("aria-expanded", "false");
+  if (opts.ariaLabel) btn.setAttribute("aria-label", opts.ariaLabel);
+  btn.innerHTML = `<span class="val"></span>${CHEV_SVG}`;
+  const current = opts.options.find((o) => o.id === opts.value) || opts.options[0];
+  btn.querySelector(".val").textContent = current ? current.label : "";
+  host.appendChild(btn);
+
+  const menu = document.createElement("div");
+  menu.className = "dd-menu"; menu.hidden = true; menu.setAttribute("role", "listbox");
+  opts.options.forEach((o) => {
+    const it = document.createElement("button");
+    it.type = "button";
+    it.className = "dd-item" + (o.id === opts.value ? " sel" : "");
+    it.setAttribute("role", "option");
+    it.setAttribute("aria-selected", o.id === opts.value ? "true" : "false");
+    it.innerHTML = `${TICK_SVG}<span class="name"></span>` +
+      (opts.suggId && o.id === opts.suggId ? `<span class="sugg-tag">modello suggerito</span>` : "");
+    it.querySelector(".name").textContent = o.label;
+    it.onclick = (e) => {
+      e.stopPropagation();
+      closeAllDD();
+      if (o.id !== opts.value) opts.onChange(o.id);
+    };
+    menu.appendChild(it);
+  });
+  host.appendChild(menu);
+
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    const isOpen = !menu.hidden;
+    closeAllDD();
+    if (!isOpen) {
+      menu.hidden = false;
+      host.classList.add("open");
+      btn.setAttribute("aria-expanded", "true");
+    }
+  };
+}
 
 function render() {
   $("#app").innerHTML = `
@@ -227,12 +323,7 @@ function render() {
       <section class="card">
         <div class="section-label">Chiavi API e priorità</div>
         <div class="stack">
-          <select id="provider">
-            <option value="openai">OpenAI</option>
-            <option value="groq">Groq</option>
-            <option value="google">Google Gemini</option>
-            <option value="custom">Personalizzato (compatibile OpenAI)</option>
-          </select>
+          <div id="ddProvider" class="dd"></div>
           <input id="apiKey" type="password" placeholder="Incolla qui la chiave API">
           <input id="baseUrl" type="text" placeholder="URL base (solo Personalizzato)">
           <button id="saveKey" class="btn primary">Salva API key</button>
@@ -245,18 +336,15 @@ function render() {
         </div>
         <p id="prefMsg" class="muted"></p>
         <p class="muted" style="margin-top:8px">
-          Le modifiche alla catena (aggiunte, rimozioni, ordine, modelli) restano
-          in bozza finché non premi "Salva ordine provider": l'app continua a
-          usare l'ultima catena salvata.
+          Le modifiche alla catena (aggiunte, rimozioni, ordine) restano in bozza
+          finché non premi "Salva ordine provider". I modelli scelti si confermano
+          con "Salva preferenza modello" dentro i dettagli della chiave.
         </p>
       </section>
 
       <section class="card">
         <div class="section-label">Modelli locali (fallback offline)</div>
-        <select id="model">
-          <option value="onnx-community/whisper-tiny">Tiny — più leggero</option>
-          <option value="onnx-community/whisper-base">Base — più accurato</option>
-        </select>
+        <div id="ddLocal" class="dd"></div>
         <button id="preload" class="btn secondary" style="margin-top:10px">
           Scarica modelli locali ora
         </button>
@@ -293,8 +381,6 @@ function render() {
     if (file) process(file);
   };
 
-  $("#model").onchange = () => { asr = null; activeModel = null; };
-
   $("#preload").onclick = async () => {
     if (busy) return;
     busy = true;
@@ -311,13 +397,11 @@ function render() {
   };
 
   const settings = loadSettings();
-  const modelSel = $("#model");
-  if (settings.localModel &&
-      [...modelSel.options].some((o) => o.value === settings.localModel)) {
-    modelSel.value = settings.localModel;
-  }
+  providerChoice = settings.lastProvider || "openai";
+  buildProviderDD();
+  buildLocalDD();
 
-  /* ===== TL;DR: controlli ===== */
+  /* ===== TL;DR ===== */
   document.querySelectorAll(".seg button").forEach((b) => {
     b.onclick = () => {
       const group = b.closest(".seg").dataset.group;
@@ -389,14 +473,15 @@ function render() {
     } catch (error) { if (error?.name !== "AbortError") { console.error(error); stat("Impossibile condividere il testo.", 0); } }
   };
 
-  /* ===== Chiavi: salva key + salva ordine ===== */
+  /* ===== Chiavi ===== */
   $("#saveKey").onclick = async () => {
     const key = $("#apiKey").value.trim();
     const msg = $("#keysMsg");
     if (!key) { msg.textContent = "Incolla prima una chiave API."; return; }
     const entry = {
-      id: "k" + Date.now(), provider: $("#provider").value, apiKey: key,
-      baseUrl: $("#baseUrl").value.trim(), sttModel: "", llmModel: "", isNew: true
+      id: "k" + Date.now(), provider: providerChoice, apiKey: key,
+      baseUrl: $("#baseUrl").value.trim(),
+      sttModel: "", llmModel: "", suggStt: "", suggLlm: "", isNew: true
     };
     const localIndex = draftKeys.findIndex((k) => k.id === "local");
     draftKeys.splice(localIndex < 0 ? draftKeys.length : localIndex, 0, entry);
@@ -405,15 +490,16 @@ function render() {
     msg.textContent = "Chiave aggiunta alla bozza. Rilevo i modelli disponibili…";
     try {
       const cls = await ensureModels(entry, true);
-      const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
-      entry.sttModel = pick(cls.stt, p.recommended.stt);
-      entry.llmModel = pick(cls.chat, p.recommended.llm);
-      msg.textContent = "Modelli rilevati: trascrizione " + entry.sttModel +
-        ", riepilogo " + entry.llmModel + ". Premi Salva ordine provider per attivare.";
+      entry.suggStt = suggestModel(cls.stt, "stt", entry.provider);
+      entry.suggLlm = suggestModel(cls.chat, "llm", entry.provider);
+      entry.sttModel = entry.suggStt;
+      entry.llmModel = entry.suggLlm;
+      msg.textContent = "Modelli rilevati. Suggeriti: trascrizione " + entry.suggStt +
+        ", riepilogo " + entry.suggLlm + ". Premi Salva ordine provider per attivare.";
     } catch (error) {
       const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
-      entry.sttModel = p.recommended.stt;
-      entry.llmModel = p.recommended.llm;
+      entry.suggStt = p.recommended.stt; entry.suggLlm = p.recommended.llm;
+      entry.sttModel = entry.suggStt; entry.llmModel = entry.suggLlm;
       msg.textContent = "Rilevamento modelli non riuscito (" + (error?.message || error) +
         "): userò i consigliati del provider. Premi Salva ordine provider per attivare.";
     }
@@ -438,6 +524,37 @@ function render() {
   syncTldrUi();
   renderPresets();
   loadShared();
+}
+
+function buildProviderDD() {
+  makeDropdown($("#ddProvider"), {
+    value: providerChoice,
+    options: Object.keys(PROVIDERS).map((k) => ({ id: k, label: PROVIDERS[k].label })),
+    ariaLabel: "Provider",
+    onChange: (id) => {
+      providerChoice = id;
+      saveSettings({ lastProvider: id });
+      buildProviderDD();
+    }
+  });
+}
+function buildLocalDD() {
+  const s = loadSettings();
+  const opts = [
+    { id: "onnx-community/whisper-tiny", label: "Tiny — più leggero" },
+    { id: "onnx-community/whisper-base", label: "Base — più accurato" }
+  ];
+  const val = opts.some((o) => o.id === s.localModel) ? s.localModel : opts[0].id;
+  makeDropdown($("#ddLocal"), {
+    value: val,
+    options: opts,
+    ariaLabel: "Modello Whisper locale",
+    onChange: (id) => {
+      saveSettings({ localModel: id });
+      asr = null; activeModel = null;
+      buildLocalDD();
+    }
+  });
 }
 
 /* ===== UI TL;DR ===== */
@@ -494,26 +611,6 @@ function markDirty() {
   if (chip) chip.hidden = false;
 }
 function updatePrefMsg() { $("#prefMsg").textContent = "Catena attiva: " + chainLabel() + "."; }
-function pick(list, rec) {
-  return list.some((m) => m.id === rec) ? rec : (list[0]?.id || "");
-}
-async function ensureModels(entry, force) {
-  if (!force && modelCache[entry.id]) return modelCache[entry.id];
-  const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
-  const models = await listModels(entry);
-  const cls = classifyModels(models, p.family);
-  modelCache[entry.id] = cls;
-  return cls;
-}
-async function repairEntryModels(entry) {
-  try {
-    const cls = await ensureModels(entry, true);
-    const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
-    entry.sttModel = pick(cls.stt, p.recommended.stt);
-    entry.llmModel = pick(cls.chat, p.recommended.llm);
-    updateEntry(entry.id, { sttModel: entry.sttModel, llmModel: entry.llmModel });
-  } catch (e) { /* resta il modello attuale */ }
-}
 
 function renderKeyList() {
   const list = $("#keyList");
@@ -539,42 +636,13 @@ function renderKeyList() {
       const tog = document.createElement("button");
       tog.className = "btn ghost"; tog.textContent = "dettagli";
       li.appendChild(tog);
-
       const det = document.createElement("div");
       det.className = "details";
-      det.innerHTML = `
-        <button class="kmodels btn secondary">Aggiorna modelli disponibili</button>
-        <p class="kmsg muted"></p>
-        <div class="kselects">
-          <label class="muted">Modello trascrizione (solo audio)</label><select class="kstt"></select>
-          <label class="muted">Modello riepilogo (solo chat)</label><select class="kllm"></select>
-        </div>
-        <div class="lasterr"></div>
-        <button class="kremove btn ghost">Rimuovi chiave</button>`;
       li.appendChild(det);
-
       tog.onclick = () => {
         if (det.classList.contains("open")) det.classList.remove("open");
-        else openDetails(det, entry);
+        else openDetails(det, entry, false);
       };
-      det.querySelector(".kmodels").onclick = async () => {
-        det.dataset.filled = "";
-        await openDetails(det, entry, true);
-      };
-      det.querySelector(".kstt").onchange = (e) => {
-        entry.sttModel = e.target.value.replace(" — consigliato", "");
-        markDirty();
-      };
-      det.querySelector(".kllm").onchange = (e) => {
-        entry.llmModel = e.target.value.replace(" — consigliato", "");
-        markDirty();
-      };
-      det.querySelector(".kremove").onclick = () => {
-        draftKeys = draftKeys.filter((k) => k.id !== entry.id);
-        markDirty();
-        renderKeyList();
-      };
-      refreshLastErr(det, entry);
     }
     list.appendChild(li);
   }
@@ -583,28 +651,134 @@ function renderKeyList() {
 
 async function openDetails(det, entry, force) {
   det.classList.add("open");
-  if (det.dataset.filled && !force) { refreshLastErr(det, entry); return; }
-  const msg = det.querySelector(".kmsg");
-  const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
-  msg.textContent = "Carico i modelli con questa chiave…";
-  try {
-    const cls = await ensureModels(entry, !!force);
-    fillModelSelect(det.querySelector(".kstt"), cls.stt, p.recommended.stt, entry.sttModel);
-    fillModelSelect(det.querySelector(".kllm"), cls.chat, p.recommended.llm, entry.llmModel);
-    det.dataset.filled = "1";
-    det.querySelector(".kselects").classList.add("open");
-    msg.textContent = cls.stt.length + " modelli audio e " + cls.chat.length +
-      " modelli chat trovati: quelli consigliati hanno il flag.";
-  } catch (error) {
-    fillModelSelect(det.querySelector(".kstt"),
-      [{ id: p.recommended.stt, label: p.recommended.stt }], p.recommended.stt, entry.sttModel || p.recommended.stt);
-    fillModelSelect(det.querySelector(".kllm"),
-      [{ id: p.recommended.llm, label: p.recommended.llm }], p.recommended.llm, entry.llmModel || p.recommended.llm);
-    det.querySelector(".kselects").classList.add("open");
-    msg.textContent = "Lettura modelli non riuscita: " + (error?.message || error) +
-      ". Mostro i consigliati del provider.";
+  if (det.dataset.filled && !force) {
+    refreshKeyNotes(entry, det);
+    refreshLastErr(det, entry);
+    return;
   }
+  det.innerHTML = `
+    <button class="kmodels btn secondary">Aggiorna modelli disponibili</button>
+    <p class="kmsg muted"></p>
+    <label class="muted">Modello trascrizione (solo audio)</label>
+    <div class="ddhost" data-slot="stt"></div>
+    <div class="sugg" data-sugg="stt"></div>
+    <p class="note" data-note="stt"></p>
+    <div class="actions">
+      <button class="btn primary" data-savepref="stt">Salva preferenza modello</button>
+      <span class="chip ok" data-chip="stt" hidden></span>
+    </div>
+    <label class="muted">Modello riepilogo (solo chat)</label>
+    <div class="ddhost" data-slot="llm"></div>
+    <div class="sugg" data-sugg="llm"></div>
+    <p class="note" data-note="llm"></p>
+    <div class="actions">
+      <button class="btn primary" data-savepref="llm">Salva preferenza modello</button>
+      <span class="chip ok" data-chip="llm" hidden></span>
+    </div>
+    <div class="lasterr"></div>
+    <button class="kremove btn ghost">Rimuovi chiave</button>`;
+
+  const msg = det.querySelector(".kmsg");
+  msg.textContent = "Carico i modelli con questa chiave…";
+  let cls = null;
+  try {
+    cls = await ensureModels(entry, !!force);
+    entry.suggStt = suggestModel(cls.stt, "stt", entry.provider);
+    entry.suggLlm = suggestModel(cls.chat, "llm", entry.provider);
+    if (!entry.sttModel) entry.sttModel = entry.suggStt;
+    if (!entry.llmModel) entry.llmModel = entry.suggLlm;
+    msg.textContent = cls.stt.length + " modelli audio e " + cls.chat.length + " modelli chat trovati.";
+  } catch (error) {
+    const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
+    entry.suggStt = entry.suggStt || p.recommended.stt;
+    entry.suggLlm = entry.suggLlm || p.recommended.llm;
+    if (!entry.sttModel) entry.sttModel = entry.suggStt;
+    if (!entry.llmModel) entry.llmModel = entry.suggLlm;
+    cls = {
+      stt: [{ id: entry.suggStt, label: entry.suggStt }],
+      chat: [{ id: entry.suggLlm, label: entry.suggLlm }]
+    };
+    msg.textContent = "Lettura modelli non riuscita: " + (error?.message || error) + ". Mostro il suggerito.";
+  }
+  det._cls = cls;
+  buildKeyDropdowns(det, entry);
+  wireDetails(det, entry);
+  det.dataset.filled = "1";
+  refreshKeyNotes(entry, det);
   refreshLastErr(det, entry);
+}
+
+function buildKeyDropdowns(det, entry) {
+  const cls = det._cls || { stt: [], chat: [] };
+  makeDropdown(det.querySelector('[data-slot="stt"]'), {
+    value: entry.sttModel,
+    options: cls.stt,
+    suggId: entry.suggStt,
+    ariaLabel: "Modello trascrizione",
+    onChange: (id) => {
+      entry.sttModel = id;
+      markDirty();
+      buildKeyDropdowns(det, entry);
+      refreshKeyNotes(entry, det);
+    }
+  });
+  makeDropdown(det.querySelector('[data-slot="llm"]'), {
+    value: entry.llmModel,
+    options: cls.chat,
+    suggId: entry.suggLlm,
+    ariaLabel: "Modello riepilogo",
+    onChange: (id) => {
+      entry.llmModel = id;
+      markDirty();
+      buildKeyDropdowns(det, entry);
+      refreshKeyNotes(entry, det);
+    }
+  });
+}
+
+function wireDetails(det, entry) {
+  det.querySelector(".kmodels").onclick = () => openDetails(det, entry, true);
+  det.querySelector(".kremove").onclick = () => {
+    draftKeys = draftKeys.filter((k) => k.id !== entry.id);
+    markDirty();
+    renderKeyList();
+  };
+  det.querySelector('[data-savepref="stt"]').onclick = () => savePref(entry, "stt", det);
+  det.querySelector('[data-savepref="llm"]').onclick = () => savePref(entry, "llm", det);
+}
+
+function savePref(entry, slot, det) {
+  if (slot === "stt") entry.prefStt = entry.sttModel;
+  else entry.prefLlm = entry.llmModel;
+  updateEntry(entry.id, {
+    sttModel: entry.sttModel, llmModel: entry.llmModel,
+    suggStt: entry.suggStt, suggLlm: entry.suggLlm,
+    prefStt: entry.prefStt, prefLlm: entry.prefLlm
+  });
+  refreshKeyNotes(entry, det);
+  stat("Preferenza salvata: " + (slot === "stt" ? entry.sttModel : entry.llmModel), 100);
+}
+
+function refreshKeyNotes(entry, det) {
+  ["stt", "llm"].forEach((slot) => {
+    const model = slot === "stt" ? entry.sttModel : entry.llmModel;
+    const sugg = slot === "stt" ? entry.suggStt : entry.suggLlm;
+    const suggEl = det.querySelector('[data-sugg="' + slot + '"]');
+    const noteEl = det.querySelector('[data-note="' + slot + '"]');
+    const chip = det.querySelector('[data-chip="' + slot + '"]');
+    if (suggEl) suggEl.textContent = "Modello suggerito: " + (sugg || "—");
+    if (noteEl) {
+      noteEl.textContent = model !== sugg
+        ? "Preferenza non vincolante: in caso di errori su " + model +
+          ", l'app proverà " + sugg + " (stessa chiave) prima di passare al provider successivo."
+        : "Stai usando il modello suggerito: in caso di errori l'app passerà al provider successivo.";
+    }
+    if (chip) {
+      const pref = slot === "stt" ? entry.prefStt : entry.prefLlm;
+      chip.hidden = pref !== model;
+      if (!chip.hidden) chip.textContent = "Preferenza salvata: " + model;
+    }
+  });
 }
 
 function refreshLastErr(det, entry) {
@@ -640,22 +814,6 @@ function enableSort(listEl) {
   });
 }
 
-function fillModelSelect(sel, models, recommendedId, savedId) {
-  sel.innerHTML = "";
-  for (const m of models) {
-    const opt = document.createElement("option");
-    opt.value = m.id;
-    opt.textContent = m.label + (m.id === recommendedId ? " — consigliato" : "");
-    sel.appendChild(opt);
-  }
-  const chosen =
-    savedId && models.some((m) => m.id === savedId) ? savedId :
-    models.some((m) => m.id === recommendedId) ? recommendedId :
-    models[0]?.id || "";
-  sel.value = chosen;
-  return chosen;
-}
-
 /* ===== Modelli locali ===== */
 async function decode(file) {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -684,7 +842,7 @@ async function createPipeline(task, model, dtype) {
   }
 }
 async function getASR() {
-  const model = $("#model").value;
+  const model = loadSettings().localModel || "onnx-community/whisper-tiny";
   if (asr && activeModel === model) return asr;
   asr = null; activeModel = model;
   asr = await createPipeline("automatic-speech-recognition", model, "fp32");
@@ -711,37 +869,39 @@ async function localSummarize(transcript, instruction) {
   return (output[0]?.generated_text || "").replace(prompt, "").trim();
 }
 
-/* ===== Retry intelligente per codice HTTP ===== */
-async function callWithRetry(entry, pct, makeCall) {
-  let repaired = false;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const out = await makeCall(entry);
-      clearLastError(entry.id);
-      return out;
-    } catch (err) {
-      saveLastError(entry.id, describeError(err));
-      const st = err && err.status;
-      if (st === 401 || st === 403 || st === 402) throw err;
-      if (st === 400 || st === 404) {
-        if (!repaired) {
-          repaired = true;
-          stat(entryLabel(entry) + ": modello non valido, lo correggo e riprovo…", pct);
-          await repairEntryModels(entry);
-          continue;
+/* ===== Retry: scelto → suggerito → (catena) ===== */
+async function callWithRetry(entry, slot, pct, makeCall) {
+  const chosen = slot === "stt" ? entry.sttModel : entry.llmModel;
+  const sugg = entrySugg(entry, slot);
+  const seq = [chosen];
+  if (sugg && sugg !== chosen) seq.push(sugg);
+
+  for (let s = 0; s < seq.length; s++) {
+    const model = seq[s];
+    if (s > 0) {
+      stat(entryLabel(entry) + ": il modello scelto ha dato errore, uso il suggerito " + model + "…", pct);
+    }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const out = await makeCall(entry, model);
+        if (s > 0) saveLastError(entry.id, "il modello scelto ha dato errore; completato con il suggerito " + model);
+        else clearLastError(entry.id);
+        return out;
+      } catch (err) {
+        saveLastError(entry.id, describeError(err));
+        const st = err && err.status;
+        if (st === 401 || st === 403 || st === 402) throw err;
+        if (st === 429 || (st >= 500 && st <= 599) || !st) {
+          if (attempt === 0) {
+            const why = st === 429 ? "limite di frequenza" : (st ? "errore del provider" : "rete instabile");
+            stat(entryLabel(entry) + ": " + why + ", riprovo tra 1,5 s…", pct);
+            await sleep(1500);
+            continue;
+          }
+          break;
         }
-        throw err;
+        break;
       }
-      if (st === 429 || (st >= 500 && st <= 599) || !st) {
-        if (attempt === 0) {
-          const why = st === 429 ? "limite di frequenza" : (st ? "errore del provider" : "rete instabile");
-          stat(entryLabel(entry) + ": " + why + ", riprovo tra 1,5 s…", pct);
-          await sleep(1500);
-          continue;
-        }
-        throw err;
-      }
-      throw err;
     }
   }
   throw new Error("Tentativi esauriti per " + entryLabel(entry));
@@ -758,7 +918,8 @@ async function runSummaryChain(transcript, start) {
         summary = await localSummarize(transcript, instruction);
       } else {
         stat("Riepilogo TL;DR con " + entryLabel(entry) + "…", 70);
-        summary = await callWithRetry(entry, 70, (e) => apiSummarize(transcript, e, instruction));
+        summary = await callWithRetry(entry, "llm", 70,
+          (e, m) => apiSummarize(transcript, Object.assign({}, e, { llmModel: m }), instruction));
       }
       if (summary) {
         return { summary, engine: entry.id === "local" ? "locale" : "API " + entryLabel(entry) };
@@ -789,7 +950,8 @@ async function process(file) {
           sttEngine = "locale";
         } else {
           stat("Trascrizione con " + entryLabel(entry) + "…", 30);
-          transcript = await callWithRetry(entry, 30, (e) => apiTranscribe(file, e));
+          transcript = await callWithRetry(entry, "stt", 30,
+            (e, m) => apiTranscribe(file, Object.assign({}, e, { sttModel: m })));
           sttEngine = "API " + entryLabel(entry);
         }
         if (transcript) { okIndex = i; break; }
