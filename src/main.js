@@ -118,6 +118,7 @@ function clearLastError(id) {
   if (id in m) { delete m[id]; localStorage.setItem(LASTERR_KEY, JSON.stringify(m)); }
 }
 function describeError(err) {
+  if (err && err.name === "AbortError") return "timeout della richiesta (rete lenta o bloccata)";
   const st = err && err.status;
   if (st === 401 || st === 403) return "chiave non valida (HTTP " + st + ")";
   if (st === 402) return "crediti esauriti (HTTP 402)";
@@ -437,7 +438,7 @@ function render() {
   $("#regen").onclick = async () => {
     const transcript = $("#txt").value.trim();
     if (!transcript) { stat("Nessuna trascrizione da riassumere: elabora prima un audio.", 0); return; }
-    if (busy) return;
+    if (busy) { stat("Elaborazione già in corso: attendi.", 0); return; }
     busy = true;
     const sum = $("#sum");
     sum.classList.add("loading");
@@ -445,13 +446,7 @@ function render() {
     try {
       const r = await runSummaryChain(transcript, 0);
       if (r.summary) showTldr(r.summary, r.engine, "Riepilogo generato con le regole impostate.");
-      else {
-        sum.classList.remove("loading");
-        sum.textContent = "TL;DR non disponibile su questo dispositivo.";
-        $("#engLlm").textContent = "non disponibile";
-        $("#chipLlm").hidden = false;
-        $("#regen").textContent = "⟳ Rigenera TL;DR";
-      }
+      else showTldrFail(r.reasons);
       stat("Completato.", 100);
     } catch (error) {
       sum.classList.remove("loading");
@@ -539,6 +534,20 @@ function render() {
 
 function fullText() {
   return $("#txt").value + (hasSummary ? "\n\nTL;DR\n" + $("#sum").textContent : "");
+}
+
+function showTldrFail(reasons) {
+  hasSummary = false;
+  const sum = $("#sum");
+  sum.classList.remove("loading");
+  sum.textContent = "TL;DR non generato. Motivi:\n• " +
+    (reasons && reasons.length ? reasons.join("\n• ") : "errore sconosciuto") +
+    "\n\nSuggerimento: controlla crediti e modelli delle chiavi nei dettagli, " +
+    "oppure prepara il fallback con \"Scarica modelli locali ora\".";
+  $("#chipLlm").hidden = true;
+  $("#regen").textContent = "⟳ Rigenera TL;DR";
+  $("#all").disabled = false;
+  $("#save").disabled = false;
 }
 
 function buildProviderDD() {
@@ -879,7 +888,11 @@ async function localTranscribe(file, audio) {
   return (result.text || "").trim();
 }
 async function localSummarize(transcript, instruction) {
-  stat("Creo il riepilogo TL;DR locale…", 75);
+  if (!llm) {
+    stat("Primo uso del riepilogo locale: scarico il modello TL;DR (può richiedere alcuni minuti)…", 75);
+  } else {
+    stat("Creo il riepilogo TL;DR locale…", 75);
+  }
   const summarizer = await getLLM();
   const prompt = instruction + "\n\nTESTO:\n" + transcript;
   const output = await summarizer(prompt, { max_new_tokens: 200, temperature: 0.2, do_sample: false });
@@ -910,7 +923,7 @@ async function callWithRetry(entry, slot, pct, makeCall) {
         if (st === 401 || st === 403 || st === 402) throw err;
         if (st === 429 || (st >= 500 && st <= 599) || !st) {
           if (attempt === 0) {
-            const why = st === 429 ? "limite di frequenza" : (st ? "errore del provider" : "rete instabile");
+            const why = st === 429 ? "limite di frequenza" : (st ? "errore del provider" : "rete instabile o timeout");
             stat(entryLabel(entry) + ": " + why + ", riprovo tra 1,5 s…", pct);
             await sleep(1500);
             continue;
@@ -927,6 +940,7 @@ async function callWithRetry(entry, slot, pct, makeCall) {
 async function runSummaryChain(transcript, start) {
   const chain = loadSettings().keys;
   const instruction = composeInstruction(tldrSettings());
+  const reasons = [];
   for (let i = start; i < chain.length; i++) {
     const entry = chain[i];
     try {
@@ -939,15 +953,19 @@ async function runSummaryChain(transcript, start) {
           (e, m) => apiSummarize(transcript, Object.assign({}, e, { llmModel: m }), instruction));
       }
       if (summary) {
-        return { summary, engine: entry.id === "local" ? "locale" : "API " + entryLabel(entry) };
+        return { summary, engine: entry.id === "local" ? "locale" : "API " + entryLabel(entry), reasons };
       }
+      reasons.push(entryLabel(entry) + ": risposta vuota");
     } catch (error) {
       console.warn("Riepilogo fallito (" + entryLabel(entry) + "):", error);
-      stat(entryLabel(entry) + " non disponibile per il TL;DR (" +
-        (loadLastErrors()[entry.id] || "errore") + "): provo la successiva…", 70);
+      reasons.push(entryLabel(entry) + ": " +
+        (entry.id === "local"
+          ? (error?.message || "errore del modello locale")
+          : (loadLastErrors()[entry.id] || error?.message || "errore")));
+      stat(entryLabel(entry) + " non disponibile per il TL;DR: provo la successiva…", 70);
     }
   }
-  return { summary: "", engine: "" };
+  return { summary: "", engine: "", reasons };
 }
 
 async function process(file) {
@@ -998,13 +1016,7 @@ async function process(file) {
         : "Audio oltre il minuto (" + fmtDur(duration) + "): il riepilogo viene generato automaticamente.";
       const r = await runSummaryChain(transcript, okIndex);
       if (r.summary) showTldr(r.summary, r.engine, null);
-      else {
-        const sum = $("#sum");
-        sum.textContent = "TL;DR non disponibile su questo dispositivo.";
-        $("#engLlm").textContent = "non disponibile";
-        $("#chipLlm").hidden = false;
-        $("#regen").textContent = "⟳ Rigenera TL;DR";
-      }
+      else showTldrFail(r.reasons);
     } else {
       $("#autoNote").textContent = "Audio breve (" + fmtDur(duration) +
         "): trascrizione completata. Il riepilogo non è stato generato automaticamente.";
