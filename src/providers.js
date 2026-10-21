@@ -41,6 +41,12 @@ function toBase64(buffer) {
   return btoa(binary);
 }
 
+function httpError(res, label) {
+  const e = new Error(label + " HTTP " + res.status);
+  e.status = res.status;
+  return e;
+}
+
 export async function listModels(settings) {
   const p = PROVIDERS[settings.provider] || PROVIDERS.openai;
 
@@ -48,7 +54,7 @@ export async function listModels(settings) {
     const res = await fetch(
       baseFor(settings) + "/models?key=" + encodeURIComponent(settings.apiKey)
     );
-    if (!res.ok) throw new Error("HTTP " + res.status);
+    if (!res.ok) throw httpError(res, "Elenco modelli");
     const data = await res.json();
     return (data.models || [])
       .filter((m) =>
@@ -60,9 +66,21 @@ export async function listModels(settings) {
   const res = await fetch(baseFor(settings) + "/models", {
     headers: { Authorization: "Bearer " + settings.apiKey }
   });
-  if (!res.ok) throw new Error("HTTP " + res.status);
+  if (!res.ok) throw httpError(res, "Elenco modelli");
   const data = await res.json();
   return (data.data || []).map((m) => ({ id: m.id, label: m.id }));
+}
+
+/* Divide i modelli per capacità: audio/trascrizione vs chat/riepilogo */
+export function classifyModels(models, family) {
+  if (family === "gemini") return { stt: models.slice(), chat: models.slice() };
+  const sttRe = /whisper|transcribe|voxtral|audio|speech|stt|parakeet/i;
+  const stt = models.filter((m) => sttRe.test(m.id));
+  const chat = models.filter((m) => !sttRe.test(m.id));
+  return {
+    stt: stt.length ? stt : models.slice(),
+    chat: chat.length ? chat : models.slice()
+  };
 }
 
 export async function apiTranscribe(file, settings) {
@@ -87,11 +105,11 @@ export async function apiTranscribe(file, settings) {
         })
       }
     );
-    if (!res.ok) throw new Error("HTTP " + res.status);
+    if (!res.ok) throw httpError(res, "API trascrizione");
     const data = await res.json();
     const text = (data?.candidates?.[0]?.content?.parts || [])
       .map((x) => x.text || "").join("").trim();
-    if (!text) throw new Error("testo vuoto");
+    if (!text) throw new Error("API trascrizione: testo vuoto");
     return text;
   }
 
@@ -104,10 +122,10 @@ export async function apiTranscribe(file, settings) {
     headers: { Authorization: "Bearer " + settings.apiKey },
     body: form
   });
-  if (!res.ok) throw new Error("HTTP " + res.status);
+  if (!res.ok) throw httpError(res, "API trascrizione");
   const data = await res.json();
   const text = (data.text || "").trim();
-  if (!text) throw new Error("testo vuoto");
+  if (!text) throw new Error("API trascrizione: testo vuoto");
   return text;
 }
 
@@ -129,11 +147,11 @@ export async function apiSummarize(transcript, settings, instruction) {
         })
       }
     );
-    if (!res.ok) throw new Error("HTTP " + res.status);
+    if (!res.ok) throw httpError(res, "API riepilogo");
     const data = await res.json();
     const summary = (data?.candidates?.[0]?.content?.parts || [])
       .map((x) => x.text || "").join("").trim();
-    if (!summary) throw new Error("risposta vuota");
+    if (!summary) throw new Error("API riepilogo: risposta vuota");
     return summary;
   }
 
@@ -153,9 +171,9 @@ export async function apiSummarize(transcript, settings, instruction) {
       temperature: 0.2
     })
   });
-  if (!res.ok) throw new Error("HTTP " + res.status);
+  if (!res.ok) throw httpError(res, "API riepilogo");
   const data = await res.json();
   const summary = (data.choices?.[0]?.message?.content || "").trim();
-  if (!summary) throw new Error("risposta vuota");
+  if (!summary) throw new Error("API riepilogo: risposta vuota");
   return summary;
 }
