@@ -47,12 +47,21 @@ function httpError(res, label) {
   return e;
 }
 
+/* Timeout: nessuna chiamata può restare appesa per sempre */
+function fetchT(url, opts, ms) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms);
+  return fetch(url, Object.assign({}, opts, { signal: ctl.signal }))
+    .finally(() => clearTimeout(timer));
+}
+
 export async function listModels(settings) {
   const p = PROVIDERS[settings.provider] || PROVIDERS.openai;
 
   if (p.family === "gemini") {
-    const res = await fetch(
-      baseFor(settings) + "/models?key=" + encodeURIComponent(settings.apiKey)
+    const res = await fetchT(
+      baseFor(settings) + "/models?key=" + encodeURIComponent(settings.apiKey),
+      {}, 30000
     );
     if (!res.ok) throw httpError(res, "Elenco modelli");
     const data = await res.json();
@@ -63,15 +72,14 @@ export async function listModels(settings) {
       .map((m) => ({ id: m.name, label: m.displayName || m.name }));
   }
 
-  const res = await fetch(baseFor(settings) + "/models", {
+  const res = await fetchT(baseFor(settings) + "/models", {
     headers: { Authorization: "Bearer " + settings.apiKey }
-  });
+  }, 30000);
   if (!res.ok) throw httpError(res, "Elenco modelli");
   const data = await res.json();
   return (data.data || []).map((m) => ({ id: m.id, label: m.id }));
 }
 
-/* Divide i modelli per capacità: audio/trascrizione vs chat/riepilogo */
 export function classifyModels(models, family) {
   if (family === "gemini") return { stt: models.slice(), chat: models.slice() };
   const sttRe = /whisper|transcribe|voxtral|audio|speech|stt|parakeet/i;
@@ -89,7 +97,7 @@ export async function apiTranscribe(file, settings) {
   if (p.family === "gemini") {
     const model = settings.sttModel || p.recommended.stt;
     const b64 = toBase64(await file.arrayBuffer());
-    const res = await fetch(
+    const res = await fetchT(
       baseFor(settings) + "/" + model + ":generateContent?key=" +
         encodeURIComponent(settings.apiKey),
       {
@@ -103,7 +111,8 @@ export async function apiTranscribe(file, settings) {
             ]
           }]
         })
-      }
+      },
+      120000
     );
     if (!res.ok) throw httpError(res, "API trascrizione");
     const data = await res.json();
@@ -117,11 +126,11 @@ export async function apiTranscribe(file, settings) {
   form.append("file", file, file.name || "audio.ogg");
   form.append("model", settings.sttModel || p.recommended.stt);
   form.append("language", "it");
-  const res = await fetch(baseFor(settings) + "/audio/transcriptions", {
+  const res = await fetchT(baseFor(settings) + "/audio/transcriptions", {
     method: "POST",
     headers: { Authorization: "Bearer " + settings.apiKey },
     body: form
-  });
+  }, 120000);
   if (!res.ok) throw httpError(res, "API trascrizione");
   const data = await res.json();
   const text = (data.text || "").trim();
@@ -136,7 +145,7 @@ export async function apiSummarize(transcript, settings, instruction) {
 
   if (p.family === "gemini") {
     const model = settings.llmModel || p.recommended.llm;
-    const res = await fetch(
+    const res = await fetchT(
       baseFor(settings) + "/" + model + ":generateContent?key=" +
         encodeURIComponent(settings.apiKey),
       {
@@ -145,7 +154,8 @@ export async function apiSummarize(transcript, settings, instruction) {
         body: JSON.stringify({
           contents: [{ parts: [{ text: instr + "\n\nTESTO:\n" + transcript }] }]
         })
-      }
+      },
+      90000
     );
     if (!res.ok) throw httpError(res, "API riepilogo");
     const data = await res.json();
@@ -155,7 +165,7 @@ export async function apiSummarize(transcript, settings, instruction) {
     return summary;
   }
 
-  const res = await fetch(baseFor(settings) + "/chat/completions", {
+  const res = await fetchT(baseFor(settings) + "/chat/completions", {
     method: "POST",
     headers: {
       Authorization: "Bearer " + settings.apiKey,
@@ -170,7 +180,7 @@ export async function apiSummarize(transcript, settings, instruction) {
       max_tokens: 200,
       temperature: 0.2
     })
-  });
+  }, 90000);
   if (!res.ok) throw httpError(res, "API riepilogo");
   const data = await res.json();
   const summary = (data.choices?.[0]?.message?.content || "").trim();
