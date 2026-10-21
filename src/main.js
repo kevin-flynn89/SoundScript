@@ -15,6 +15,27 @@ let llm = null;
 let busy = false;
 let activeModel = null;
 
+/* ===== Regole TL;DR personalizzabili ===== */
+const TLR_LEN = {
+  breve: "Massimo 1 frase.",
+  medio: "Massimo 3 frasi.",
+  lungo: "Un paragrafo (5-8 frasi)."
+};
+const TLR_STYLE = {
+  narrativo: (l) => `Riassumi ${l} il seguente messaggio vocale in forma discorsiva.`,
+  elenco: (l) => `Riassumi ${l} il seguente messaggio vocale come elenco puntato.`,
+  azioni: (l) => `Estrai ${l} dal seguente messaggio vocale le azioni, gli impegni e le scadenze, come elenco puntato.`,
+  formale: (l) => `Riassumi ${l} il seguente messaggio vocale in tono formale.`,
+  informale: (l) => `Riassumi ${l} il seguente messaggio vocale in tono amichevole.`
+};
+const TLR_LANG = { it: "in italiano", auto: "nella stessa lingua del testo trascritto" };
+const TLR_LABEL = {
+  len: { breve: "breve", medio: "medio", lungo: "lungo" },
+  style: { narrativo: "narrativo", elenco: "elenco puntato", azioni: "azioni e scadenze", formale: "formale", informale: "amichevole" },
+  lang: { it: "italiano", auto: "automatica" }
+};
+const DEFAULT_TLR = { len: "medio", style: "narrativo", lang: "it", custom: "" };
+
 function migrateSettings(s) {
   if (Array.isArray(s.keys)) return s;
   const keys = [];
@@ -57,6 +78,16 @@ function entryLabel(entry) {
 }
 function chainLabel() { return loadSettings().keys.map(entryLabel).join(" → "); }
 
+function tldrSettings() {
+  return { ...DEFAULT_TLR, ...(loadSettings().tldr || {}) };
+}
+function composeInstruction(t) {
+  let p = TLR_STYLE[t.style](TLR_LANG[t.lang]) + " " + TLR_LEN[t.len];
+  p += " Conserva solo le informazioni importanti. Non inventare dettagli.";
+  if (t.custom && t.custom.trim()) p += " " + t.custom.trim();
+  return p;
+}
+
 function stat(message, percent) {
   const status = $("#status");
   const bar = $("#bar");
@@ -78,7 +109,6 @@ function render() {
     <header class="header">
       <div class="logo">${LOGO_SVG}</div>
       <div class="brand">SoundScript</div>
-      <span class="muted" style="margin-left:auto">Catena API + offline</span>
     </header>
 
     <main>
@@ -101,7 +131,67 @@ function render() {
         <div class="progress"><div id="bar" class="progress-bar"></div></div>
       </section>
 
-      <section id="result" class="card result-card hidden"></section>
+      <section id="resultStt" class="card result-card hidden">
+        <div class="section-label">Trascrizione</div>
+        <div class="chips"><span class="chip active">Motore: <b id="engStt"></b></span></div>
+        <textarea id="txt" aria-label="Testo della trascrizione"></textarea>
+        <div class="actions">
+          <button id="copy" class="btn secondary">Copia trascrizione</button>
+          <button id="share" class="btn secondary">Condividi</button>
+        </div>
+      </section>
+
+      <section id="resultTldr" class="card">
+        <div class="section-label">Riepilogo TL;DR</div>
+
+        <div class="field-label" style="margin-top:0">Lunghezza</div>
+        <div class="seg" data-group="len">
+          <button data-v="breve">Breve · 1 frase</button>
+          <button data-v="medio">Medio · 3 frasi</button>
+          <button data-v="lungo">Lungo · paragrafo</button>
+        </div>
+
+        <div class="field-label">Stile</div>
+        <div class="seg" data-group="style">
+          <button data-v="narrativo">Narrativo</button>
+          <button data-v="elenco">Elenco puntato</button>
+          <button data-v="azioni">Azioni e scadenze</button>
+          <button data-v="formale">Formale</button>
+          <button data-v="informale">Amichevole</button>
+        </div>
+
+        <div class="field-label">Lingua del riepilogo</div>
+        <div class="seg" data-group="lang">
+          <button data-v="it">Italiano</button>
+          <button data-v="auto">Automatica · lingua dell'audio</button>
+        </div>
+
+        <div class="field-label">Istruzioni personalizzate <span class="muted">(opzionali)</span></div>
+        <input id="tldrCustom" type="text" placeholder="es. evidenzia solo date e nomi di persone">
+
+        <div class="field-label">Anteprima del prompt inviato al modello</div>
+        <div class="prompt-box" id="promptBox"></div>
+
+        <div class="field-label">Preset salvati</div>
+        <div class="preset-row" id="presetRow"></div>
+        <div class="preset-row">
+          <input id="presetName" type="text" placeholder="Nome del preset (es. Scadenze rapide)" style="flex:1;min-width:160px">
+          <button id="savePreset" class="btn secondary">Salva preset</button>
+        </div>
+
+        <div class="actions">
+          <button id="regen" class="btn primary">⟳ Rigenera TL;DR</button>
+        </div>
+
+        <div class="chips" style="margin-top:14px"><span class="chip active" id="chipLlm" hidden>Motore: <b id="engLlm"></b></span></div>
+        <div id="sum" class="tldr-box">Il TL;DR comparirà qui dopo l'elaborazione.</div>
+        <p id="tldrMeta" class="muted" style="margin-top:8px"></p>
+
+        <div class="actions">
+          <button id="all" class="btn primary" disabled>Copia tutto</button>
+          <button id="save" class="btn ghost" disabled>Salva</button>
+        </div>
+      </section>
 
       <section class="card">
         <div class="section-label">Chiavi API e priorità</div>
@@ -209,9 +299,130 @@ function render() {
     renderKeyList(); updatePrefMsg();
   };
 
+  /* ===== controlli TL;DR ===== */
+  document.querySelectorAll(".seg button").forEach((b) => {
+    b.onclick = () => {
+      const group = b.closest(".seg").dataset.group;
+      const t = tldrSettings();
+      t[group] = b.dataset.v;
+      saveSettings({ tldr: t });
+      syncTldrUi();
+    };
+  });
+  $("#tldrCustom").oninput = (e) => {
+    const t = tldrSettings();
+    t.custom = e.target.value;
+    saveSettings({ tldr: t });
+    syncTldrUi();
+  };
+  $("#savePreset").onclick = () => {
+    const name = $("#presetName").value.trim();
+    if (!name) { stat("Scrivi un nome per il preset.", 0); return; }
+    const s = loadSettings();
+    const presets = Array.isArray(s.tldrPresets) ? s.tldrPresets : [];
+    presets.push({ name, ...tldrSettings() });
+    saveSettings({ tldrPresets: presets });
+    $("#presetName").value = "";
+    renderPresets();
+    stat("Preset salvato: " + name, 100);
+  };
+  $("#regen").onclick = async () => {
+    const transcript = $("#txt").value.trim();
+    if (!transcript) { stat("Nessuna trascrizione da riassumere: elabora prima un audio.", 0); return; }
+    if (busy) return;
+    busy = true;
+    const sum = $("#sum");
+    sum.classList.add("loading");
+    sum.textContent = "Rigenero il TL;DR con le nuove regole…";
+    try {
+      const r = await runSummaryChain(transcript, 0);
+      if (r.summary) showTldr(r.summary, r.engine);
+      else {
+        sum.classList.remove("loading");
+        sum.textContent = "TL;DR non disponibile su questo dispositivo.";
+        $("#engLlm").textContent = "non disponibile";
+        $("#chipLlm").hidden = false;
+      }
+      stat("Completato.", 100);
+    } catch (error) {
+      sum.classList.remove("loading");
+      stat("Errore nella rigenerazione: " + (error?.message || error), 0);
+    } finally { busy = false; }
+  };
+
+  $("#copy").onclick = async () => { await copyText($("#txt").value); stat("Trascrizione copiata.", 100); };
+  $("#all").onclick = async () => {
+    await copyText($("#txt").value + "\n\nTL;DR\n" + $("#sum").textContent);
+    stat("Trascrizione e riepilogo copiati.", 100);
+  };
+  $("#save").onclick = () => {
+    try {
+      const items = JSON.parse(localStorage.getItem("vtt-history") || "[]");
+      items.unshift({ date: new Date().toISOString(), transcript: $("#txt").value, summary: $("#sum").textContent });
+      localStorage.setItem("vtt-history", JSON.stringify(items.slice(0, 20)));
+      stat("Salvato nella cronologia locale.", 100);
+    } catch (error) { console.error(error); stat("Impossibile salvare nella cronologia locale.", 0); }
+  };
+  $("#share").onclick = async () => {
+    const text = $("#txt").value + "\n\nTL;DR\n" + $("#sum").textContent;
+    try {
+      if (navigator.share) await navigator.share({ title: "SoundScript", text });
+      else { await copyText(text); stat("Testo copiato: puoi incollarlo dove vuoi.", 100); }
+    } catch (error) { if (error?.name !== "AbortError") { console.error(error); stat("Impossibile condividere il testo.", 0); } }
+  };
+
   renderKeyList();
   updatePrefMsg();
+  syncTldrUi();
+  renderPresets();
   loadShared();
+}
+
+/* ===== UI TL;DR ===== */
+function syncTldrUi() {
+  const t = tldrSettings();
+  document.querySelectorAll(".seg").forEach((g) => {
+    const k = g.dataset.group;
+    g.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.v === t[k]));
+  });
+  const ci = $("#tldrCustom");
+  if (ci && document.activeElement !== ci) ci.value = t.custom || "";
+  $("#promptBox").textContent = composeInstruction(t) + "\n\nTESTO:\n[trascrizione del vocale]";
+  updateTldrMeta();
+}
+function updateTldrMeta() {
+  const t = tldrSettings();
+  $("#tldrMeta").textContent =
+    "Stile: " + TLR_LABEL.style[t.style] +
+    " · Lunghezza: " + TLR_LABEL.len[t.len] +
+    " · Lingua: " + TLR_LABEL.lang[t.lang];
+}
+function renderPresets() {
+  const row = $("#presetRow");
+  row.innerHTML = "";
+  const presets = Array.isArray(loadSettings().tldrPresets) ? loadSettings().tldrPresets : [];
+  presets.forEach((p, i) => {
+    const c = document.createElement("span");
+    c.className = "preset-chip";
+    const lab = document.createElement("span");
+    lab.textContent = p.name;
+    const x = document.createElement("span");
+    x.className = "x"; x.title = "Elimina"; x.textContent = "×";
+    lab.onclick = () => {
+      saveSettings({ tldr: { len: p.len, style: p.style, lang: p.lang, custom: p.custom || "" } });
+      syncTldrUi();
+      stat("Preset applicato: " + p.name, 100);
+    };
+    x.onclick = (e) => {
+      e.stopPropagation();
+      const s = loadSettings();
+      s.tldrPresets = s.tldrPresets.filter((_, k) => k !== i);
+      saveSettings({ tldrPresets: s.tldrPresets });
+      renderPresets();
+    };
+    c.appendChild(lab); c.appendChild(x);
+    row.appendChild(c);
+  });
 }
 
 function updatePrefMsg() { $("#prefMsg").textContent = "All'avvio uso: " + chainLabel() + "."; }
@@ -374,12 +585,37 @@ async function localTranscribe(file) {
   const result = await transcriber(audio, { language: "italian", task: "transcribe", chunk_length_s: 30, stride_length_s: 5 });
   return (result.text || "").trim();
 }
-async function localSummarize(transcript) {
+async function localSummarize(transcript, instruction) {
   stat("Creo il riepilogo TL;DR locale…", 75);
   const summarizer = await getLLM();
-  const prompt = "Riassumi in italiano il seguente messaggio vocale in massimo 3 frasi. Conserva solo le informazioni importanti. Non inventare dettagli.\n\nTESTO:\n" + transcript;
-  const output = await summarizer(prompt, { max_new_tokens: 120, temperature: 0.2, do_sample: false });
+  const prompt = instruction + "\n\nTESTO:\n" + transcript;
+  const output = await summarizer(prompt, { max_new_tokens: 200, temperature: 0.2, do_sample: false });
   return (output[0]?.generated_text || "").replace(prompt, "").trim();
+}
+
+/* ===== Catena di riepilogo (riusata da process e da Rigenera) ===== */
+async function runSummaryChain(transcript, start) {
+  const chain = loadSettings().keys;
+  const instruction = composeInstruction(tldrSettings());
+  for (let i = start; i < chain.length; i++) {
+    const entry = chain[i];
+    try {
+      let summary;
+      if (entry.id === "local") {
+        summary = await localSummarize(transcript, instruction);
+      } else {
+        stat("Riepilogo TL;DR con " + entryLabel(entry) + "…", 70);
+        summary = await apiSummarize(transcript, entry, instruction);
+      }
+      if (summary) {
+        return { summary, engine: entry.id === "local" ? "locale" : "API " + entryLabel(entry) };
+      }
+    } catch (error) {
+      console.warn("Riepilogo fallito (" + entryLabel(entry) + "):", error);
+      stat(entryLabel(entry) + " non disponibile per il TL;DR: provo la successiva…", 70);
+    }
+  }
+  return { summary: "", engine: "" };
 }
 
 async function process(file) {
@@ -403,20 +639,17 @@ async function process(file) {
       }
     }
     if (!transcript) throw new Error("Nessuna chiave né il modello locale hanno riconosciuto testo.");
-    let summary = "", llmEngine = "";
-    for (let i = okIndex; i < chain.length; i++) {
-      const entry = chain[i];
-      try {
-        if (entry.id === "local") { summary = await localSummarize(transcript); llmEngine = "locale"; }
-        else { stat("Riepilogo TL;DR con " + entryLabel(entry) + "…", 70); summary = await apiSummarize(transcript, entry); llmEngine = "API " + entryLabel(entry); }
-        if (summary) break;
-      } catch (error) {
-        console.warn("Riepilogo fallito (" + entryLabel(entry) + "):", error);
-        stat(entryLabel(entry) + " non disponibile per il TL;DR: provo la successiva…", 70);
-      }
+    showTranscript(transcript, sttEngine);
+
+    const r = await runSummaryChain(transcript, okIndex);
+    if (r.summary) showTldr(r.summary, r.engine);
+    else {
+      const sum = $("#sum");
+      sum.textContent = "TL;DR non disponibile su questo dispositivo.";
+      $("#engLlm").textContent = "non disponibile";
+      $("#chipLlm").hidden = false;
+      $("#all").disabled = false; $("#save").disabled = false;
     }
-    if (!summary) { summary = "TL;DR non disponibile su questo dispositivo."; llmEngine = "non disponibile"; }
-    show(transcript, summary, sttEngine, llmEngine);
     stat("Completato.", 100);
   } catch (error) {
     console.error("Errore durante l'elaborazione:", error);
@@ -427,49 +660,20 @@ async function process(file) {
   }
 }
 
-function show(transcript, summary, sttEngine, llmEngine) {
-  const result = $("#result");
-  result.classList.remove("hidden");
-  result.innerHTML = `
-    <div class="section-label">Risultato</div>
-    <div class="chips">
-      <span class="chip active">Trascrizione: <b id="engStt"></b></span>
-      <span class="chip">TL;DR: <b id="engLlm"></b></span>
-    </div>
-    <div class="field-label">Trascrizione</div>
-    <textarea id="txt" aria-label="Testo della trascrizione"></textarea>
-    <div class="actions">
-      <button id="copy" class="btn secondary">Copia trascrizione</button>
-      <button id="share" class="btn secondary">Condividi</button>
-    </div>
-    <div class="field-label">TL;DR</div>
-    <div id="sum" class="tldr-box"></div>
-    <div class="actions">
-      <button id="all" class="btn primary">Copia tutto</button>
-      <button id="save" class="btn ghost">Salva</button>
-    </div>
-  `;
-  $("#engStt").textContent = sttEngine;
-  $("#engLlm").textContent = llmEngine;
+function showTranscript(transcript, engine) {
+  $("#resultStt").classList.remove("hidden");
+  $("#engStt").textContent = engine;
   $("#txt").value = transcript;
-  $("#sum").textContent = summary || "TL;DR non disponibile su questo dispositivo.";
-  $("#copy").onclick = async () => { await copyText($("#txt").value); stat("Trascrizione copiata.", 100); };
-  $("#all").onclick = async () => { await copyText($("#txt").value + "\n\nTL;DR\n" + $("#sum").textContent); stat("Trascrizione e riepilogo copiati.", 100); };
-  $("#save").onclick = () => {
-    try {
-      const items = JSON.parse(localStorage.getItem("vtt-history") || "[]");
-      items.unshift({ date: new Date().toISOString(), transcript: $("#txt").value, summary: $("#sum").textContent });
-      localStorage.setItem("vtt-history", JSON.stringify(items.slice(0, 20)));
-      stat("Salvato nella cronologia locale.", 100);
-    } catch (error) { console.error(error); stat("Impossibile salvare nella cronologia locale.", 0); }
-  };
-  $("#share").onclick = async () => {
-    const text = $("#txt").value + "\n\nTL;DR\n" + $("#sum").textContent;
-    try {
-      if (navigator.share) await navigator.share({ title: "SoundScript", text });
-      else { await copyText(text); stat("Testo copiato: puoi incollarlo dove vuoi.", 100); }
-    } catch (error) { if (error?.name !== "AbortError") { console.error(error); stat("Impossibile condividere il testo.", 0); } }
-  };
+}
+function showTldr(summary, engine) {
+  const sum = $("#sum");
+  sum.classList.remove("loading");
+  sum.textContent = summary;
+  $("#engLlm").textContent = engine;
+  $("#chipLlm").hidden = false;
+  updateTldrMeta();
+  $("#all").disabled = false;
+  $("#save").disabled = false;
 }
 
 async function copyText(text) {
