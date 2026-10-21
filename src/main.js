@@ -29,7 +29,6 @@ function fmtDur(s) {
   const ss = Math.floor(s % 60);
   return m + ":" + String(ss).padStart(2, "0");
 }
-function fmtMB(bytes) { return (bytes / 1048576).toFixed(1) + " MB"; }
 
 /* ===== Regole TL;DR ===== */
 const TLR_LEN = {
@@ -356,36 +355,10 @@ function render() {
         <button id="preload" class="btn secondary" style="margin-top:10px">
           Scarica modelli locali ora
         </button>
-        <div class="disclaimer">
-          <span class="ic">ⓘ</span>
-          <span>
-            Il fallback offline scarica i modelli sul dispositivo al primo utilizzo:
-            <b>trascrizione (Whisper)</b> poche decine di MB, <b>riepilogo (modello lingua)</b> alcune centinaia di MB.
-            Conviene prepararli una volta sola in <b>Wi‑Fi</b> con "Scarica modelli locali ora":
-            dopo restano in cache e funzionano anche senza rete.
-          </span>
-        </div>
-        <div class="dl-area" id="dlArea" hidden>
-          <div class="dl-head">
-            <div class="spinner" id="dlSpinner"></div>
-            <div class="dl-step" id="dlStep">Modello trascrizione (Whisper)</div>
-            <div class="dl-stepcount" id="dlStepCount">1 di 2</div>
-          </div>
-          <div class="dl-file">
-            <span class="fname" id="dlFile">…</span>
-            <span id="dlPct">0%</span>
-          </div>
-          <div class="dl-bar"><div class="dl-fill" id="dlFill"></div></div>
-          <div class="dl-meta">
-            <span id="dlLoaded">0 MB</span>
-            <span id="dlTotal">di 0 MB</span>
-          </div>
-          <div class="dl-list" id="dlList"></div>
-          <div class="dl-done" id="dlDone" hidden>
-            <span class="dl-check">✓</span>
-            <span>Modelli locali pronti in cache. Il fallback funzionerà anche senza rete.</span>
-          </div>
-        </div>
+        <p class="muted" style="margin-top:8px">
+          Mette i modelli in cache subito: il fondo della catena sarà immediato.
+          WebGPU viene usato quando disponibile, con ripiego su WASM.
+        </p>
       </section>
 
       <section class="card">
@@ -418,25 +391,16 @@ function render() {
   $("#preload").onclick = async () => {
     if (busy) return;
     busy = true;
-    const btn = $("#preload");
-    btn.disabled = true;
-    showDlArea();
     try {
       if (navigator.storage?.persist) await navigator.storage.persist();
-      setDlStep("Modello trascrizione (Whisper)", "1 di 2");
-      await getASR(true);
-      setDlStep("Modello riepilogo (TL;DR)", "2 di 2");
-      await getLLM(true);
-      hideDlSpinner();
-      showDlDone();
+      stat("Scarico il modello Whisper locale…", 10);
+      await getASR();
+      stat("Scarico il modello TL;DR locale…", 60);
+      await getLLM();
       stat("Modelli locali pronti in cache.", 100);
     } catch (error) {
-      hideDlSpinner();
       stat("Download modelli locali non riuscito: " + (error?.message || error), 0);
-    } finally {
-      busy = false;
-      btn.disabled = false;
-    }
+    } finally { busy = false; }
   };
 
   const settings = loadSettings();
@@ -584,26 +548,6 @@ function showTldrFail(reasons) {
   $("#regen").textContent = "⟳ Rigenera TL;DR";
   $("#all").disabled = false;
   $("#save").disabled = false;
-}
-
-/* ===== UI download ===== */
-function showDlArea() { $("#dlArea").hidden = false; $("#dlDone").hidden = true; $("#dlSpinner").hidden = false; $("#dlList").innerHTML = ""; }
-function hideDlSpinner() { $("#dlSpinner").hidden = true; }
-function showDlDone() { $("#dlDone").hidden = false; $("#dlFill").style.width = "100%"; }
-function setDlStep(label, count) { $("#dlStep").textContent = label; $("#dlStepCount").textContent = count; }
-function updateDlProgress(pct, loaded, total, fileName) {
-  $("#dlFile").textContent = fileName || "…";
-  $("#dlPct").textContent = Math.round(pct) + "%";
-  $("#dlFill").style.width = pct + "%";
-  $("#dlLoaded").textContent = fmtMB(loaded);
-  $("#dlTotal").textContent = "di " + fmtMB(total);
-}
-function addDlListItem(fileName, size, status) {
-  const list = $("#dlList");
-  const row = document.createElement("div");
-  row.className = "dl-file-row " + status;
-  row.innerHTML = '<span class="dot"></span><span>' + fileName + " · " + fmtMB(size) + '</span>';
-  list.appendChild(row);
 }
 
 function buildProviderDD() {
@@ -897,7 +841,7 @@ function enableSort(listEl) {
   });
 }
 
-/* ===== Modelli locali con progress ===== */
+/* ===== Modelli locali ===== */
 async function decode(file) {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) throw new Error("Il browser non supporta la decodifica audio richiesta.");
@@ -914,49 +858,32 @@ async function decode(file) {
     return rendered.getChannelData(0);
   } finally { await context.close().catch(() => {}); }
 }
-
-function makeProgressCallback(label) {
-  let lastPct = -1;
-  return (progress) => {
-    if (!progress || !progress.total || !progress.file) return;
-    const pct = (progress.loaded / progress.total) * 100;
-    if (Math.abs(pct - lastPct) < 0.5) return;
-    lastPct = pct;
-    updateDlProgress(pct, progress.loaded, progress.total, progress.file);
-  };
-}
-
-async function createPipeline(task, model, dtype, showProgress) {
-  const opts = { dtype, progress_callback: showProgress ? makeProgressCallback(model) : undefined };
+async function createPipeline(task, model, dtype) {
   try {
     stat("Caricamento modello locale con WebGPU…", 15);
-    return await pipeline(task, model, Object.assign({}, opts, { device: "webgpu" }));
+    return await pipeline(task, model, { dtype, device: "webgpu" });
   } catch (webgpuError) {
     console.warn("WebGPU non disponibile, provo WASM:", webgpuError);
     stat("WebGPU non disponibile. Modalità compatibile…", 20);
-    return await pipeline(task, model, Object.assign({}, opts, { dtype: "q8", device: "wasm" }));
+    return await pipeline(task, model, { dtype: "q8", device: "wasm" });
   }
 }
-async function getASR(showProgress) {
+async function getASR() {
   const model = loadSettings().localModel || "onnx-community/whisper-tiny";
   if (asr && activeModel === model) return asr;
   asr = null; activeModel = model;
-  asr = await createPipeline("automatic-speech-recognition", model, "fp32", showProgress);
+  asr = await createPipeline("automatic-speech-recognition", model, "fp32");
   return asr;
 }
-async function getLLM(showProgress) {
+async function getLLM() {
   if (llm) return llm;
-  llm = await createPipeline("text-generation", "onnx-community/Qwen2.5-0.5B-Instruct", "q4", showProgress);
+  llm = await createPipeline("text-generation", "onnx-community/Qwen2.5-0.5B-Instruct", "q4");
   return llm;
 }
 async function localTranscribe(file, audio) {
   const a = audio || await decode(file);
-  if (!llm) {
-    stat("Primo uso della trascrizione locale: scarico il modello Whisper (può richiedere alcuni minuti)…", 30);
-  } else {
-    stat("Trascrizione locale in corso…", 30);
-  }
-  const transcriber = await getASR(false);
+  stat("Trascrizione locale in corso…", 30);
+  const transcriber = await getASR();
   const result = await transcriber(a, { language: "italian", task: "transcribe", chunk_length_s: 30, stride_length_s: 5 });
   return (result.text || "").trim();
 }
@@ -966,7 +893,7 @@ async function localSummarize(transcript, instruction) {
   } else {
     stat("Creo il riepilogo TL;DR locale…", 75);
   }
-  const summarizer = await getLLM(false);
+  const summarizer = await getLLM();
   const prompt = instruction + "\n\nTESTO:\n" + transcript;
   const output = await summarizer(prompt, { max_new_tokens: 200, temperature: 0.2, do_sample: false });
   return (output[0]?.generated_text || "").replace(prompt, "").trim();
