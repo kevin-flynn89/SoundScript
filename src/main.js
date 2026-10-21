@@ -11,16 +11,24 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const SHARE_CACHE = "soundscript-share-v1";
 const SETTINGS_KEY = "vtt-settings";
 const LASTERR_KEY = "vtt-lasterr";
+const TLDR_AUTO_SECONDS = 60;
 
 let asr = null;
 let llm = null;
 let busy = false;
 let activeModel = null;
+let hasSummary = false;
 
 let draftKeys = null;
 let chainDirty = false;
 let providerChoice = "openai";
 const modelCache = {};
+
+function fmtDur(s) {
+  const m = Math.floor(s / 60);
+  const ss = Math.floor(s % 60);
+  return m + ":" + String(ss).padStart(2, "0");
+}
 
 /* ===== Regole TL;DR ===== */
 const TLR_LEN = {
@@ -120,7 +128,7 @@ function describeError(err) {
   return "errore di rete o CORS";
 }
 
-/* ===== Suggerimento modelli valutato dalla PWA ===== */
+/* ===== Suggerimento modelli ===== */
 function suggestModel(list, slot, provider) {
   const p = PROVIDERS[provider] || PROVIDERS.openai;
   const rec = slot === "stt" ? p.recommended.stt : p.recommended.llm;
@@ -149,12 +157,6 @@ async function ensureModels(entry, force) {
   const cls = classifyModels(models, p.family);
   modelCache[entry.id] = cls;
   return cls;
-}
-function applySuggFromCache(entry) {
-  const cls = modelCache[entry.id];
-  if (!cls) return;
-  if (!entry.suggStt) entry.suggStt = suggestModel(cls.stt, "stt", entry.provider);
-  if (!entry.suggLlm) entry.suggLlm = suggestModel(cls.chat, "llm", entry.provider);
 }
 
 function stat(message, percent) {
@@ -260,7 +262,10 @@ function render() {
 
       <section id="resultStt" class="card result-card hidden">
         <div class="section-label">Trascrizione</div>
-        <div class="chips"><span class="chip active">Motore: <b id="engStt"></b></span></div>
+        <div class="chips">
+          <span class="chip active">Motore: <b id="engStt"></b></span>
+          <span class="chip">Durata: <b id="durStt"></b></span>
+        </div>
         <textarea id="txt" aria-label="Testo della trascrizione"></textarea>
         <div class="actions">
           <button id="copy" class="btn secondary">Copia trascrizione</button>
@@ -270,8 +275,9 @@ function render() {
 
       <section id="resultTldr" class="card">
         <div class="section-label">Riepilogo TL;DR</div>
+        <p class="note" id="autoNote" style="margin-top:0"></p>
 
-        <div class="field-label" style="margin-top:0">Lunghezza</div>
+        <div class="field-label">Lunghezza</div>
         <div class="seg" data-group="len">
           <button data-v="breve">Breve · 1 frase</button>
           <button data-v="medio">Medio · 3 frasi</button>
@@ -307,7 +313,7 @@ function render() {
         </div>
 
         <div class="actions">
-          <button id="regen" class="btn primary">⟳ Rigenera TL;DR</button>
+          <button id="regen" class="btn primary">Genera TL;DR</button>
         </div>
 
         <div class="chips" style="margin-top:14px"><span class="chip active" id="chipLlm" hidden>Motore: <b id="engLlm"></b></span></div>
@@ -435,38 +441,43 @@ function render() {
     busy = true;
     const sum = $("#sum");
     sum.classList.add("loading");
-    sum.textContent = "Rigenero il TL;DR con le nuove regole…";
+    sum.textContent = "Genero il TL;DR con le regole impostate…";
     try {
       const r = await runSummaryChain(transcript, 0);
-      if (r.summary) showTldr(r.summary, r.engine);
+      if (r.summary) showTldr(r.summary, r.engine, "Riepilogo generato con le regole impostate.");
       else {
         sum.classList.remove("loading");
         sum.textContent = "TL;DR non disponibile su questo dispositivo.";
         $("#engLlm").textContent = "non disponibile";
         $("#chipLlm").hidden = false;
+        $("#regen").textContent = "⟳ Rigenera TL;DR";
       }
       stat("Completato.", 100);
     } catch (error) {
       sum.classList.remove("loading");
-      stat("Errore nella rigenerazione: " + (error?.message || error), 0);
+      stat("Errore nella generazione: " + (error?.message || error), 0);
     } finally { busy = false; }
   };
 
   $("#copy").onclick = async () => { await copyText($("#txt").value); stat("Trascrizione copiata.", 100); };
   $("#all").onclick = async () => {
-    await copyText($("#txt").value + "\n\nTL;DR\n" + $("#sum").textContent);
-    stat("Trascrizione e riepilogo copiati.", 100);
+    await copyText(fullText());
+    stat(hasSummary ? "Trascrizione e riepilogo copiati." : "Trascrizione copiata.", 100);
   };
   $("#save").onclick = () => {
     try {
       const items = JSON.parse(localStorage.getItem("vtt-history") || "[]");
-      items.unshift({ date: new Date().toISOString(), transcript: $("#txt").value, summary: $("#sum").textContent });
+      items.unshift({
+        date: new Date().toISOString(),
+        transcript: $("#txt").value,
+        summary: hasSummary ? $("#sum").textContent : ""
+      });
       localStorage.setItem("vtt-history", JSON.stringify(items.slice(0, 20)));
       stat("Salvato nella cronologia locale.", 100);
     } catch (error) { console.error(error); stat("Impossibile salvare nella cronologia locale.", 0); }
   };
   $("#share").onclick = async () => {
-    const text = $("#txt").value + "\n\nTL;DR\n" + $("#sum").textContent;
+    const text = fullText();
     try {
       if (navigator.share) await navigator.share({ title: "SoundScript", text });
       else { await copyText(text); stat("Testo copiato: puoi incollarlo dove vuoi.", 100); }
@@ -524,6 +535,10 @@ function render() {
   syncTldrUi();
   renderPresets();
   loadShared();
+}
+
+function fullText() {
+  return $("#txt").value + (hasSummary ? "\n\nTL;DR\n" + $("#sum").textContent : "");
 }
 
 function buildProviderDD() {
@@ -611,6 +626,9 @@ function markDirty() {
   if (chip) chip.hidden = false;
 }
 function updatePrefMsg() { $("#prefMsg").textContent = "Catena attiva: " + chainLabel() + "."; }
+function pick(list, rec) {
+  return list.some((m) => m.id === rec) ? rec : (list[0]?.id || "");
+}
 
 function renderKeyList() {
   const list = $("#keyList");
@@ -853,12 +871,11 @@ async function getLLM() {
   llm = await createPipeline("text-generation", "onnx-community/Qwen2.5-0.5B-Instruct", "q4");
   return llm;
 }
-async function localTranscribe(file) {
-  stat("Preparo l'audio…", 5);
-  const audio = await decode(file);
+async function localTranscribe(file, audio) {
+  const a = audio || await decode(file);
   stat("Trascrizione locale in corso…", 30);
   const transcriber = await getASR();
-  const result = await transcriber(audio, { language: "italian", task: "transcribe", chunk_length_s: 30, stride_length_s: 5 });
+  const result = await transcriber(a, { language: "italian", task: "transcribe", chunk_length_s: 30, stride_length_s: 5 });
   return (result.text || "").trim();
 }
 async function localSummarize(transcript, instruction) {
@@ -937,16 +954,27 @@ async function process(file) {
   if (busy) { stat("Attendi che termini l'elaborazione in corso."); return; }
   if (!file || file.size === 0) { stat("Il file audio è vuoto o non valido."); return; }
   busy = true;
+  hasSummary = false;
   const fileInput = $("#file");
   if (fileInput) fileInput.disabled = true;
   try {
+    stat("Preparo l'audio…", 5);
+    let audio = null, duration = null;
+    try {
+      audio = await decode(file);
+      duration = audio.length / 16000;
+    } catch (decErr) {
+      console.warn("Decodifica non riuscita: durata sconosciuta.", decErr);
+    }
+    const autoTldr = duration === null || duration >= TLDR_AUTO_SECONDS;
+
     const chain = loadSettings().keys;
     let transcript = "", sttEngine = "", okIndex = -1;
     for (let i = 0; i < chain.length; i++) {
       const entry = chain[i];
       try {
         if (entry.id === "local") {
-          transcript = await localTranscribe(file);
+          transcript = await localTranscribe(file, audio);
           sttEngine = "locale";
         } else {
           stat("Trascrizione con " + entryLabel(entry) + "…", 30);
@@ -962,16 +990,26 @@ async function process(file) {
       }
     }
     if (!transcript) throw new Error("Nessuna chiave né il modello locale hanno riconosciuto testo.");
-    showTranscript(transcript, sttEngine);
+    showTranscript(transcript, sttEngine, duration);
 
-    const r = await runSummaryChain(transcript, okIndex);
-    if (r.summary) showTldr(r.summary, r.engine);
-    else {
-      const sum = $("#sum");
-      sum.textContent = "TL;DR non disponibile su questo dispositivo.";
-      $("#engLlm").textContent = "non disponibile";
-      $("#chipLlm").hidden = false;
-      $("#all").disabled = false; $("#save").disabled = false;
+    if (autoTldr) {
+      $("#autoNote").textContent = duration === null
+        ? "Durata non leggibile: il riepilogo viene generato automaticamente."
+        : "Audio oltre il minuto (" + fmtDur(duration) + "): il riepilogo viene generato automaticamente.";
+      const r = await runSummaryChain(transcript, okIndex);
+      if (r.summary) showTldr(r.summary, r.engine, null);
+      else {
+        const sum = $("#sum");
+        sum.textContent = "TL;DR non disponibile su questo dispositivo.";
+        $("#engLlm").textContent = "non disponibile";
+        $("#chipLlm").hidden = false;
+        $("#regen").textContent = "⟳ Rigenera TL;DR";
+      }
+    } else {
+      $("#autoNote").textContent = "Audio breve (" + fmtDur(duration) +
+        "): trascrizione completata. Il riepilogo non è stato generato automaticamente.";
+      $("#sum").textContent = "Nessun TL;DR per ora: tocca Genera TL;DR se ti serve.";
+      $("#regen").textContent = "Genera TL;DR";
     }
     stat("Completato.", 100);
   } catch (error) {
@@ -983,17 +1021,23 @@ async function process(file) {
   }
 }
 
-function showTranscript(transcript, engine) {
+function showTranscript(transcript, engine, duration) {
   $("#resultStt").classList.remove("hidden");
   $("#engStt").textContent = engine;
+  $("#durStt").textContent = duration === null ? "n/d" : fmtDur(duration);
   $("#txt").value = transcript;
+  $("#all").disabled = false;
+  $("#save").disabled = false;
 }
-function showTldr(summary, engine) {
+function showTldr(summary, engine, note) {
+  hasSummary = true;
   const sum = $("#sum");
   sum.classList.remove("loading");
   sum.textContent = summary;
   $("#engLlm").textContent = engine;
   $("#chipLlm").hidden = false;
+  $("#regen").textContent = "⟳ Rigenera TL;DR";
+  if (note) $("#autoNote").textContent = note;
   updateTldrMeta();
   $("#all").disabled = false;
   $("#save").disabled = false;
