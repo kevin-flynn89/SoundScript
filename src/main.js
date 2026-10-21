@@ -1,19 +1,25 @@
 import { pipeline, env } from "@huggingface/transformers";
-import { PROVIDERS, listModels, apiTranscribe, apiSummarize } from "./providers.js";
+import { PROVIDERS, listModels, classifyModels, apiTranscribe, apiSummarize } from "./providers.js";
 import "./style.css";
 
 env.allowLocalModels = false;
 env.useBrowserCache = true;
 
 const $ = (selector) => document.querySelector(selector);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const SHARE_CACHE = "soundscript-share-v1";
 const SETTINGS_KEY = "vtt-settings";
+const LASTERR_KEY = "vtt-lasterr";
 
 let asr = null;
 let llm = null;
 let busy = false;
 let activeModel = null;
+
+let draftKeys = null;
+let chainDirty = false;
+const modelCache = {};
 
 /* ===== Regole TL;DR personalizzabili ===== */
 const TLR_LEN = {
@@ -36,6 +42,7 @@ const TLR_LABEL = {
 };
 const DEFAULT_TLR = { len: "medio", style: "narrativo", lang: "it", custom: "" };
 
+/* ===== Impostazioni ===== */
 function migrateSettings(s) {
   if (Array.isArray(s.keys)) return s;
   const keys = [];
@@ -86,6 +93,30 @@ function composeInstruction(t) {
   p += " Conserva solo le informazioni importanti. Non inventare dettagli.";
   if (t.custom && t.custom.trim()) p += " " + t.custom.trim();
   return p;
+}
+
+/* ===== Ultimi errori per chiave ===== */
+function loadLastErrors() {
+  try { return JSON.parse(localStorage.getItem(LASTERR_KEY) || "{}"); }
+  catch { return {}; }
+}
+function saveLastError(id, txt) {
+  const m = loadLastErrors(); m[id] = txt;
+  localStorage.setItem(LASTERR_KEY, JSON.stringify(m));
+}
+function clearLastError(id) {
+  const m = loadLastErrors();
+  if (id in m) { delete m[id]; localStorage.setItem(LASTERR_KEY, JSON.stringify(m)); }
+}
+function describeError(err) {
+  const st = err && err.status;
+  if (st === 401 || st === 403) return "chiave non valida (HTTP " + st + ")";
+  if (st === 402) return "crediti esauriti (HTTP 402)";
+  if (st === 429) return "limite di frequenza (HTTP 429)";
+  if (st === 400) return "modello o richiesta non valida (HTTP 400)";
+  if (st === 404) return "modello non trovato (HTTP 404)";
+  if (st >= 500) return "errore del provider (HTTP " + st + ")";
+  return "errore di rete o CORS";
 }
 
 function stat(message, percent) {
@@ -204,15 +235,19 @@ function render() {
           </select>
           <input id="apiKey" type="password" placeholder="Incolla qui la chiave API">
           <input id="baseUrl" type="text" placeholder="URL base (solo Personalizzato)">
-          <button id="addKey" class="btn secondary">Aggiungi chiave</button>
+          <button id="saveKey" class="btn primary">Salva API key</button>
           <p id="keysMsg" class="muted"></p>
         </div>
         <ul id="keyList" class="chain-list"></ul>
+        <div class="actions">
+          <button id="saveChain" class="btn primary">Salva ordine provider</button>
+          <span id="unsavedChip" class="chip warn" hidden>Modifiche non salvate</span>
+        </div>
         <p id="prefMsg" class="muted"></p>
         <p class="muted" style="margin-top:8px">
-          Trascina la maniglia ⋮ col dito per decidere l'ordine.
-          Ogni modifica si salva da sola. Se una chiave esaurisce i
-          crediti, l'app passa alla voce successiva della catena.
+          Le modifiche alla catena (aggiunte, rimozioni, ordine, modelli) restano
+          in bozza finché non premi "Salva ordine provider": l'app continua a
+          usare l'ultima catena salvata.
         </p>
       </section>
 
@@ -282,24 +317,7 @@ function render() {
     modelSel.value = settings.localModel;
   }
 
-  $("#addKey").onclick = () => {
-    const key = $("#apiKey").value.trim();
-    const msg = $("#keysMsg");
-    if (!key) { msg.textContent = "Incolla prima una chiave API."; return; }
-    const s = loadSettings();
-    const entry = {
-      id: "k" + Date.now(), provider: $("#provider").value, apiKey: key,
-      baseUrl: $("#baseUrl").value.trim(), sttModel: "", llmModel: ""
-    };
-    const localIndex = s.keys.findIndex((k) => k.id === "local");
-    s.keys.splice(localIndex < 0 ? s.keys.length : localIndex, 0, entry);
-    saveSettings({ keys: s.keys });
-    $("#apiKey").value = ""; $("#baseUrl").value = "";
-    msg.textContent = "Chiave aggiunta: trascina ⋮ per ordinare la priorità.";
-    renderKeyList(); updatePrefMsg();
-  };
-
-  /* ===== controlli TL;DR ===== */
+  /* ===== TL;DR: controlli ===== */
   document.querySelectorAll(".seg button").forEach((b) => {
     b.onclick = () => {
       const group = b.closest(".seg").dataset.group;
@@ -371,6 +389,50 @@ function render() {
     } catch (error) { if (error?.name !== "AbortError") { console.error(error); stat("Impossibile condividere il testo.", 0); } }
   };
 
+  /* ===== Chiavi: salva key + salva ordine ===== */
+  $("#saveKey").onclick = async () => {
+    const key = $("#apiKey").value.trim();
+    const msg = $("#keysMsg");
+    if (!key) { msg.textContent = "Incolla prima una chiave API."; return; }
+    const entry = {
+      id: "k" + Date.now(), provider: $("#provider").value, apiKey: key,
+      baseUrl: $("#baseUrl").value.trim(), sttModel: "", llmModel: "", isNew: true
+    };
+    const localIndex = draftKeys.findIndex((k) => k.id === "local");
+    draftKeys.splice(localIndex < 0 ? draftKeys.length : localIndex, 0, entry);
+    $("#apiKey").value = ""; $("#baseUrl").value = "";
+    markDirty(); renderKeyList();
+    msg.textContent = "Chiave aggiunta alla bozza. Rilevo i modelli disponibili…";
+    try {
+      const cls = await ensureModels(entry, true);
+      const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
+      entry.sttModel = pick(cls.stt, p.recommended.stt);
+      entry.llmModel = pick(cls.chat, p.recommended.llm);
+      msg.textContent = "Modelli rilevati: trascrizione " + entry.sttModel +
+        ", riepilogo " + entry.llmModel + ". Premi Salva ordine provider per attivare.";
+    } catch (error) {
+      const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
+      entry.sttModel = p.recommended.stt;
+      entry.llmModel = p.recommended.llm;
+      msg.textContent = "Rilevamento modelli non riuscito (" + (error?.message || error) +
+        "): userò i consigliati del provider. Premi Salva ordine provider per attivare.";
+    }
+    renderKeyList();
+  };
+
+  $("#saveChain").onclick = () => {
+    draftKeys.forEach((k) => delete k.isNew);
+    saveSettings({ keys: JSON.parse(JSON.stringify(draftKeys)) });
+    chainDirty = false;
+    $("#unsavedChip").hidden = true;
+    $("#keysMsg").textContent = "Ordine provider salvato e attivo.";
+    updatePrefMsg();
+    renderKeyList();
+  };
+
+  draftKeys = JSON.parse(JSON.stringify(loadSettings().keys));
+  chainDirty = false;
+
   renderKeyList();
   updatePrefMsg();
   syncTldrUi();
@@ -425,15 +487,41 @@ function renderPresets() {
   });
 }
 
-function updatePrefMsg() { $("#prefMsg").textContent = "All'avvio uso: " + chainLabel() + "."; }
+/* ===== Catena in bozza ===== */
+function markDirty() {
+  chainDirty = true;
+  const chip = $("#unsavedChip");
+  if (chip) chip.hidden = false;
+}
+function updatePrefMsg() { $("#prefMsg").textContent = "Catena attiva: " + chainLabel() + "."; }
+function pick(list, rec) {
+  return list.some((m) => m.id === rec) ? rec : (list[0]?.id || "");
+}
+async function ensureModels(entry, force) {
+  if (!force && modelCache[entry.id]) return modelCache[entry.id];
+  const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
+  const models = await listModels(entry);
+  const cls = classifyModels(models, p.family);
+  modelCache[entry.id] = cls;
+  return cls;
+}
+async function repairEntryModels(entry) {
+  try {
+    const cls = await ensureModels(entry, true);
+    const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
+    entry.sttModel = pick(cls.stt, p.recommended.stt);
+    entry.llmModel = pick(cls.chat, p.recommended.llm);
+    updateEntry(entry.id, { sttModel: entry.sttModel, llmModel: entry.llmModel });
+  } catch (e) { /* resta il modello attuale */ }
+}
 
 function renderKeyList() {
-  const s = loadSettings();
   const list = $("#keyList");
   list.innerHTML = "";
-  for (const entry of s.keys) {
+  for (const entry of draftKeys) {
     const li = document.createElement("li");
     li.className = "chain-item";
+    if (entry.isNew) li.classList.add("draftnew");
     li.dataset.id = entry.id;
 
     const handle = document.createElement("span");
@@ -455,42 +543,73 @@ function renderKeyList() {
       const det = document.createElement("div");
       det.className = "details";
       det.innerHTML = `
-        <button class="kmodels btn secondary">Carica modelli disponibili</button>
+        <button class="kmodels btn secondary">Aggiorna modelli disponibili</button>
         <p class="kmsg muted"></p>
         <div class="kselects">
-          <label class="muted">Modello trascrizione</label><select class="kstt"></select>
-          <label class="muted">Modello TL;DR</label><select class="kllm"></select>
+          <label class="muted">Modello trascrizione (solo audio)</label><select class="kstt"></select>
+          <label class="muted">Modello riepilogo (solo chat)</label><select class="kllm"></select>
         </div>
+        <div class="lasterr"></div>
         <button class="kremove btn ghost">Rimuovi chiave</button>`;
       li.appendChild(det);
 
-      tog.onclick = () => det.classList.toggle("open");
+      tog.onclick = () => {
+        if (det.classList.contains("open")) det.classList.remove("open");
+        else openDetails(det, entry);
+      };
       det.querySelector(".kmodels").onclick = async () => {
-        const msg = det.querySelector(".kmsg");
-        msg.textContent = "Carico i modelli con questa chiave…";
-        try {
-          const models = await listModels(entry);
-          if (!models.length) { msg.textContent = "Nessun modello trovato."; return; }
-          const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
-          const stt = fillModelSelect(det.querySelector(".kstt"), models, p.recommended.stt, entry.sttModel);
-          const llm = fillModelSelect(det.querySelector(".kllm"), models, p.recommended.llm, entry.llmModel);
-          updateEntry(entry.id, { sttModel: stt, llmModel: llm });
-          det.querySelector(".kselects").classList.add("open");
-          msg.textContent = models.length + " modelli trovati: quelli consigliati hanno il flag.";
-        } catch (error) {
-          msg.textContent = "Lettura non riuscita: " + (error?.message || error);
-        }
+        det.dataset.filled = "";
+        await openDetails(det, entry, true);
+      };
+      det.querySelector(".kstt").onchange = (e) => {
+        entry.sttModel = e.target.value.replace(" — consigliato", "");
+        markDirty();
+      };
+      det.querySelector(".kllm").onchange = (e) => {
+        entry.llmModel = e.target.value.replace(" — consigliato", "");
+        markDirty();
       };
       det.querySelector(".kremove").onclick = () => {
-        const s2 = loadSettings();
-        s2.keys = s2.keys.filter((k) => k.id !== entry.id);
-        saveSettings({ keys: s2.keys });
-        renderKeyList(); updatePrefMsg();
+        draftKeys = draftKeys.filter((k) => k.id !== entry.id);
+        markDirty();
+        renderKeyList();
       };
+      refreshLastErr(det, entry);
     }
     list.appendChild(li);
   }
   enableSort(list);
+}
+
+async function openDetails(det, entry, force) {
+  det.classList.add("open");
+  if (det.dataset.filled && !force) { refreshLastErr(det, entry); return; }
+  const msg = det.querySelector(".kmsg");
+  const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
+  msg.textContent = "Carico i modelli con questa chiave…";
+  try {
+    const cls = await ensureModels(entry, !!force);
+    fillModelSelect(det.querySelector(".kstt"), cls.stt, p.recommended.stt, entry.sttModel);
+    fillModelSelect(det.querySelector(".kllm"), cls.chat, p.recommended.llm, entry.llmModel);
+    det.dataset.filled = "1";
+    det.querySelector(".kselects").classList.add("open");
+    msg.textContent = cls.stt.length + " modelli audio e " + cls.chat.length +
+      " modelli chat trovati: quelli consigliati hanno il flag.";
+  } catch (error) {
+    fillModelSelect(det.querySelector(".kstt"),
+      [{ id: p.recommended.stt, label: p.recommended.stt }], p.recommended.stt, entry.sttModel || p.recommended.stt);
+    fillModelSelect(det.querySelector(".kllm"),
+      [{ id: p.recommended.llm, label: p.recommended.llm }], p.recommended.llm, entry.llmModel || p.recommended.llm);
+    det.querySelector(".kselects").classList.add("open");
+    msg.textContent = "Lettura modelli non riuscita: " + (error?.message || error) +
+      ". Mostro i consigliati del provider.";
+  }
+  refreshLastErr(det, entry);
+}
+
+function refreshLastErr(det, entry) {
+  const box = det.querySelector(".lasterr");
+  if (box) box.textContent = "Ultimo errore: " + (loadLastErrors()[entry.id] || "nessuno");
 }
 
 function enableSort(listEl) {
@@ -515,10 +634,9 @@ function enableSort(listEl) {
     if (!item) return;
     item.classList.remove("dragging"); item = null;
     const order = [...listEl.querySelectorAll("li")].map((li) => li.dataset.id);
-    const s = loadSettings();
-    s.keys.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
-    saveSettings({ keys: s.keys });
-    updatePrefMsg();
+    draftKeys.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+    markDirty();
+    renderKeyList();
   });
 }
 
@@ -538,6 +656,7 @@ function fillModelSelect(sel, models, recommendedId, savedId) {
   return chosen;
 }
 
+/* ===== Modelli locali ===== */
 async function decode(file) {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) throw new Error("Il browser non supporta la decodifica audio richiesta.");
@@ -554,7 +673,6 @@ async function decode(file) {
     return rendered.getChannelData(0);
   } finally { await context.close().catch(() => {}); }
 }
-
 async function createPipeline(task, model, dtype) {
   try {
     stat("Caricamento modello locale con WebGPU…", 15);
@@ -593,7 +711,42 @@ async function localSummarize(transcript, instruction) {
   return (output[0]?.generated_text || "").replace(prompt, "").trim();
 }
 
-/* ===== Catena di riepilogo (riusata da process e da Rigenera) ===== */
+/* ===== Retry intelligente per codice HTTP ===== */
+async function callWithRetry(entry, pct, makeCall) {
+  let repaired = false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const out = await makeCall(entry);
+      clearLastError(entry.id);
+      return out;
+    } catch (err) {
+      saveLastError(entry.id, describeError(err));
+      const st = err && err.status;
+      if (st === 401 || st === 403 || st === 402) throw err;
+      if (st === 400 || st === 404) {
+        if (!repaired) {
+          repaired = true;
+          stat(entryLabel(entry) + ": modello non valido, lo correggo e riprovo…", pct);
+          await repairEntryModels(entry);
+          continue;
+        }
+        throw err;
+      }
+      if (st === 429 || (st >= 500 && st <= 599) || !st) {
+        if (attempt === 0) {
+          const why = st === 429 ? "limite di frequenza" : (st ? "errore del provider" : "rete instabile");
+          stat(entryLabel(entry) + ": " + why + ", riprovo tra 1,5 s…", pct);
+          await sleep(1500);
+          continue;
+        }
+        throw err;
+      }
+      throw err;
+    }
+  }
+  throw new Error("Tentativi esauriti per " + entryLabel(entry));
+}
+
 async function runSummaryChain(transcript, start) {
   const chain = loadSettings().keys;
   const instruction = composeInstruction(tldrSettings());
@@ -605,14 +758,15 @@ async function runSummaryChain(transcript, start) {
         summary = await localSummarize(transcript, instruction);
       } else {
         stat("Riepilogo TL;DR con " + entryLabel(entry) + "…", 70);
-        summary = await apiSummarize(transcript, entry, instruction);
+        summary = await callWithRetry(entry, 70, (e) => apiSummarize(transcript, e, instruction));
       }
       if (summary) {
         return { summary, engine: entry.id === "local" ? "locale" : "API " + entryLabel(entry) };
       }
     } catch (error) {
       console.warn("Riepilogo fallito (" + entryLabel(entry) + "):", error);
-      stat(entryLabel(entry) + " non disponibile per il TL;DR: provo la successiva…", 70);
+      stat(entryLabel(entry) + " non disponibile per il TL;DR (" +
+        (loadLastErrors()[entry.id] || "errore") + "): provo la successiva…", 70);
     }
   }
   return { summary: "", engine: "" };
@@ -630,12 +784,19 @@ async function process(file) {
     for (let i = 0; i < chain.length; i++) {
       const entry = chain[i];
       try {
-        if (entry.id === "local") { transcript = await localTranscribe(file); sttEngine = "locale"; }
-        else { stat("Trascrizione con " + entryLabel(entry) + "…", 30); transcript = await apiTranscribe(file, entry); sttEngine = "API " + entryLabel(entry); }
+        if (entry.id === "local") {
+          transcript = await localTranscribe(file);
+          sttEngine = "locale";
+        } else {
+          stat("Trascrizione con " + entryLabel(entry) + "…", 30);
+          transcript = await callWithRetry(entry, 30, (e) => apiTranscribe(file, e));
+          sttEngine = "API " + entryLabel(entry);
+        }
         if (transcript) { okIndex = i; break; }
       } catch (error) {
         console.warn("Voce catena fallita (" + entryLabel(entry) + "):", error);
-        stat(entryLabel(entry) + " non disponibile: provo la successiva…", 30);
+        stat(entryLabel(entry) + " non disponibile (" +
+          (loadLastErrors()[entry.id] || "errore") + "): provo la successiva…", 30);
       }
     }
     if (!transcript) throw new Error("Nessuna chiave né il modello locale hanno riconosciuto testo.");
