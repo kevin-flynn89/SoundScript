@@ -138,8 +138,6 @@ textarea{
 .chain-label{flex:1; min-width:140px; font-weight:500}
 .details{width:100%; display:none; gap:6px; margin-top:4px}
 .details.open{display:grid}
-.kselects{display:none; gap:6px}
-.kselects.open{display:grid}
 .lasterr{font-size:12px; color:var(--muted); background:var(--surface2); border-radius:8px; padding:6px 10px; margin-top:6px}
 
 .chips{display:flex; gap:8px; flex-wrap:wrap; margin:12px 0}
@@ -150,6 +148,7 @@ textarea{
 }
 .chip.active{background:var(--grad); color:#fff; border-color:transparent}
 .chip.warn{border-color:var(--accent1); color:var(--accent1)}
+.chip.ok{border-color:var(--accent1); color:var(--accent1)}
 .chip b{font-weight:700}
 
 .result-card{animation:slideUp .4s ease-out}
@@ -183,3 +182,45 @@ textarea{
 .preset-chip:hover{border-color:var(--accent1); color:var(--text)}
 .preset-chip .x{color:var(--muted); font-weight:700; padding:0 2px; cursor:pointer}
 .preset-chip .x:hover{color:#ef4444}
+
+/* ===== Badge suggerito + nota ===== */
+.sugg{display:inline-flex; align-items:center; gap:6px; color:var(--accent1); font-weight:700; font-size:13px; margin-top:8px}
+.sugg::before{content:""; width:8px; height:8px; border-radius:50%; background:var(--accent1)}
+.note{font-size:13px; color:var(--muted); margin-top:8px; line-height:1.5}
+
+/* ===== Menu a tendina custom ===== */
+.dd{position:relative}
+.dd-btn{
+  width:100%; display:flex; align-items:center; gap:10px; padding:14px 16px;
+  border:1px solid var(--input-border); border-radius:16px; background:var(--surface);
+  font:inherit; font-size:15px; color:var(--text); cursor:pointer;
+  transition:border-color .2s, box-shadow .2s; text-align:left;
+}
+.dd-btn:hover{border-color:var(--accent1)}
+.dd-btn:focus-visible{outline:3px solid var(--accent1); outline-offset:2px}
+.dd-btn .val{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.dd-btn .chev{color:var(--muted); transition:transform .25s; flex:none}
+.dd.open .dd-btn{border-color:var(--accent1); box-shadow:0 0 0 3px color-mix(in srgb,var(--accent1) 12%,transparent)}
+.dd.open .dd-btn .chev{transform:rotate(180deg)}
+.dd-menu{
+  position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:40;
+  background:var(--surface); border:1px solid var(--border2); border-radius:16px;
+  box-shadow:0 10px 28px rgba(15,23,42,.18); padding:6px; max-height:264px;
+  overflow:auto; animation:ddin .18s ease-out;
+}
+@media (prefers-color-scheme:dark){
+  .dd-menu{box-shadow:0 10px 28px rgba(0,0,0,.55)}
+}
+@keyframes ddin{from{opacity:0; transform:translateY(-6px)}to{opacity:1; transform:none}}
+.dd-item{
+  display:flex; align-items:center; gap:10px; width:100%; padding:12px;
+  border:0; border-radius:12px; background:transparent; font:inherit;
+  font-size:14px; color:var(--text); text-align:left; cursor:pointer;
+  transition:background .15s;
+}
+.dd-item:hover{background:var(--surface2)}
+.dd-item .tick{color:var(--accent1); visibility:hidden; flex:none}
+.dd-item .name{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.dd-item .sugg-tag{flex:none; font-size:11px; font-weight:800; letter-spacing:.3px; color:var(--accent1); text-transform:uppercase}
+.dd-item.sel{background:color-mix(in srgb,var(--accent1) 12%,transparent); font-weight:600}
+.dd-item.sel .tick{visibility:visible}
