@@ -111,9 +111,9 @@ export async function apiTranscribe(file, settings) {
   return text;
 }
 
-export async function apiSummarize(transcript, settings) {
+export async function apiSummarize(transcript, settings, instruction) {
   const p = PROVIDERS[settings.provider] || PROVIDERS.openai;
-  const instruction =
+  const instr = instruction ||
     "Riassumi in italiano in massimo 3 frasi. Conserva solo le informazioni importanti. Non inventare dettagli.";
 
   if (p.family === "gemini") {
@@ -125,7 +125,7 @@ export async function apiSummarize(transcript, settings) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: instruction + "\n\nTESTO:\n" + transcript }] }]
+          contents: [{ parts: [{ text: instr + "\n\nTESTO:\n" + transcript }] }]
         })
       }
     );
@@ -146,10 +146,10 @@ export async function apiSummarize(transcript, settings) {
     body: JSON.stringify({
       model: settings.llmModel || p.recommended.llm,
       messages: [
-        { role: "system", content: instruction },
+        { role: "system", content: instr },
         { role: "user", content: transcript }
       ],
-      max_tokens: 120,
+      max_tokens: 200,
       temperature: 0.2
     })
   });
