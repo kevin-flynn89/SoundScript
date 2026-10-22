@@ -169,7 +169,7 @@ async function ensureModels(entry, force) {
   return cls;
 }
 
-/* ===== Wake Lock: tiene lo schermo acceso durante il download ===== */
+/* ===== Wake Lock ===== */
 async function requestWakeLock() {
   try {
     if ("wakeLock" in navigator) {
@@ -229,7 +229,6 @@ const LOGO_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path d="M19 10v2a7 7 0 0 1-14 0v-2" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
   <path d="M12 19v3M9 22h6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
 </svg>`;
-const EQ_HTML = `<div class="equalizer" id="eq" hidden><span></span><span></span><span></span><span></span><span></span></div>`;
 const CHEV_SVG = `<svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>`;
 const TICK_SVG = `<svg class="tick" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M378-246 154-470l43-43 181 181 384-384 43 43-427 427Z"/></svg>`;
 
@@ -291,49 +290,77 @@ function makeDropdown(host, opts) {
 
 function render() {
   $("#app").innerHTML = `
-    <header class="header">
-      <div class="logo">${LOGO_SVG}</div>
-      <div class="brand">SoundScript</div>
-    </header>
-
     <main>
-      <section class="card hero">
+      <div class="hero">
         <h1>Trascrivi i tuoi vocali.</h1>
-        <p>Condividi un audio da WhatsApp oppure selezionalo qui.<br>
-        L'app prova le chiavi in ordine e chiude con i modelli locali.</p>
-      </section>
+        <p class="sub">Condividi un audio da WhatsApp oppure selezionalo qui. L'app prova le chiavi in ordine e chiude con i modelli locali.</p>
+      </div>
 
       <section class="card">
-        <div id="drop" class="drop">
-          <div style="font-size:34px;margin-bottom:10px">🎙️</div>
-          <div style="font-weight:600;margin-bottom:6px">Trascina qui un audio</div>
-          <p class="muted">oppure scegli un file</p>
-          <button id="pick" class="btn primary" style="margin-top:14px">Scegli audio</button>
-          <input id="file" class="hidden" type="file"
-            accept="audio/*,.ogg,.opus,.m4a,.mp3,.wav,.aac">
+        <div class="card-label">Cosa fa l'app</div>
+        <div class="feature-grid">
+          <div class="feature-item">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            </div>
+            <div>
+              <h3>Elaborazione locale</h3>
+              <p>I modelli Whisper e Qwen girano sul tuo dispositivo. Zero dati al cloud.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            </div>
+            <div>
+              <h3>Catena API intelligente</h3>
+              <p>Configura più provider. Se uno esaurisce i crediti, l'app passa al successivo.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <div>
+              <h3>Condivisione diretta</h3>
+              <p>Condividi un vocale da WhatsApp direttamente a SoundScript.</p>
+            </div>
+          </div>
         </div>
-        <div class="status-row">${EQ_HTML}<div id="status" class="status" role="status" aria-live="polite">Pronto.</div></div>
-        <div class="progress"><div id="bar" class="progress-bar"></div></div>
       </section>
 
-      <section id="resultStt" class="card result-card hidden">
-        <div class="section-label">Trascrizione</div>
+      <div class="drop" id="drop">
+        <strong>Trascina qui un audio</strong>
+        <span>oppure tocca per scegliere un file</span>
+        <button id="pick" class="btn primary" style="margin-top:var(--space-md)">Scegli audio</button>
+        <input id="file" class="hidden" type="file"
+          accept="audio/*,.ogg,.opus,.m4a,.mp3,.wav,.aac">
+      </div>
+
+      <div class="status-row">
+        <div class="spinner" id="eq" hidden></div>
+        <div id="status" class="status" role="status" aria-live="polite">Pronto.</div>
+      </div>
+      <div class="progress"><div id="bar" class="progress-bar"></div></div>
+
+      <div id="resultStt" class="card hidden">
+        <div class="card-label">Trascrizione</div>
         <div class="chips">
-          <span class="chip active">Motore: <b id="engStt"></b></span>
+          <span class="chip">Motore: <b id="engStt"></b></span>
           <span class="chip">Durata: <b id="durStt"></b></span>
         </div>
         <textarea id="txt" aria-label="Testo della trascrizione"></textarea>
         <div class="actions">
-          <button id="copy" class="btn secondary">Copia trascrizione</button>
-          <button id="share" class="btn secondary">Condividi</button>
+          <button id="copy" class="btn">Copia trascrizione</button>
+          <button id="share" class="btn">Condividi</button>
         </div>
-      </section>
+      </div>
 
-      <section id="resultTldr" class="card">
-        <div class="section-label">Riepilogo TL;DR</div>
-        <p class="note" id="autoNote" style="margin-top:0"></p>
+      <div id="resultTldr" class="card">
+        <div class="card-label">Riepilogo TL;DR</div>
+        <p class="note" id="autoNote" style="margin-bottom:var(--space-md)"></p>
 
-        <div class="field-label">Lunghezza</div>
+        <div class="field-label" style="margin-top:0">Lunghezza</div>
         <div class="seg" data-group="len">
           <button data-v="breve">Breve · 1 frase</button>
           <button data-v="medio">Medio · 3 frasi</button>
@@ -365,51 +392,53 @@ function render() {
         <div class="preset-row" id="presetRow"></div>
         <div class="preset-row">
           <input id="presetName" type="text" placeholder="Nome del preset (es. Scadenze rapide)" style="flex:1;min-width:160px">
-          <button id="savePreset" class="btn secondary">Salva preset</button>
+          <button id="savePreset" class="btn">Salva preset</button>
         </div>
 
         <div class="actions">
           <button id="regen" class="btn primary">Genera TL;DR</button>
         </div>
 
-        <div class="chips" style="margin-top:14px"><span class="chip active" id="chipLlm" hidden>Motore: <b id="engLlm"></b></span></div>
+        <div class="chips" style="margin-top:var(--space-md)">
+          <span class="chip" id="chipLlm" hidden>Motore: <b id="engLlm"></b></span>
+        </div>
         <div id="sum" class="tldr-box">Il TL;DR comparirà qui dopo l'elaborazione.</div>
-        <p id="tldrMeta" class="muted" style="margin-top:8px"></p>
+        <p id="tldrMeta" class="muted" style="margin-top:var(--space-sm)"></p>
 
         <div class="actions">
           <button id="all" class="btn primary" disabled>Copia tutto</button>
-          <button id="save" class="btn ghost" disabled>Salva</button>
+          <button id="save" class="btn" disabled>Salva</button>
         </div>
-      </section>
+      </div>
 
-      <section class="card">
-        <div class="section-label">Chiavi API e priorità</div>
-        <div class="stack">
-          <div id="ddProvider" class="dd"></div>
-          <input id="apiKey" type="password" placeholder="Incolla qui la chiave API">
-          <input id="baseUrl" type="text" placeholder="URL base (solo Personalizzato)">
-          <button id="saveKey" class="btn primary">Salva API key</button>
-          <p id="keysMsg" class="muted"></p>
-        </div>
+      <details class="opt t0">
+        <summary>
+          <span class="si" aria-hidden="true"><svg viewBox="0 -960 960 960"><path d="M480-80q-82 0-155-31.5t-127.5-86Q143-252 111.5-325T80-480q0-85 32-158t87.5-127q55.5-54 130-84.5T489-880q79 0 150 26.5T763.5-780q53.5 47 85 111.5T880-527q0 108-63 170.5T650-294h-75q-18 0-31 14t-13 31q0 27 14.5 46t14.5 44q0 38-21 58.5T480-80Z"/></svg></span>
+          <span>Chiavi API e priorità</span>
+        </summary>
+        <div class="dd" id="ddProvider" style="margin-top:var(--space-md)"></div>
+        <input id="apiKey" type="password" placeholder="Incolla qui la chiave API" style="margin-top:var(--space-sm)">
+        <input id="baseUrl" type="text" placeholder="URL base (solo Personalizzato)" style="margin-top:var(--space-sm)">
+        <button id="saveKey" class="btn primary" style="margin-top:var(--space-sm)">Salva API key</button>
+        <p id="keysMsg" class="muted" style="margin-top:var(--space-sm)"></p>
         <ul id="keyList" class="chain-list"></ul>
         <div class="actions">
           <button id="saveChain" class="btn primary">Salva ordine provider</button>
           <span id="unsavedChip" class="chip warn" hidden>Modifiche non salvate</span>
         </div>
         <p id="prefMsg" class="muted"></p>
-        <p class="muted" style="margin-top:8px">
-          Le modifiche alla catena (aggiunte, rimozioni, ordine) restano in bozza
-          finché non premi "Salva ordine provider". I modelli scelti si confermano
-          con "Salva preferenza modello" dentro i dettagli della chiave.
+        <p class="muted" style="margin-top:var(--space-sm)">
+          Le modifiche alla catena restano in bozza finché non premi "Salva ordine provider".
         </p>
-      </section>
+      </details>
 
-      <section class="card">
-        <div class="section-label">Modelli locali (fallback offline)</div>
-        <div id="ddLocal" class="dd"></div>
-        <button id="preload" class="btn secondary" style="margin-top:10px">
-          Scarica modelli locali ora
-        </button>
+      <details class="opt t1">
+        <summary>
+          <span class="si" aria-hidden="true"><svg viewBox="0 -960 960 960"><path d="M480-80q-82 0-155-31.5t-127.5-86Q143-252 111.5-325T80-480q0-85 32-158t87.5-127q55.5-54 130-84.5T489-880q79 0 150 26.5T763.5-780q53.5 47 85 111.5T880-527q0 108-63 170.5T650-294h-75q-18 0-31 14t-13 31q0 27 14.5 46t14.5 44q0 38-21 58.5T480-80Z"/></svg></span>
+          <span>Modelli locali (fallback offline)</span>
+        </summary>
+        <div id="ddLocal" style="margin-top:var(--space-md)"></div>
+        <button id="preload" class="btn" style="margin-top:var(--space-sm)">Scarica modelli locali ora</button>
         <div class="wl-banner" id="wlBanner" hidden></div>
         <div class="disclaimer">
           <span class="ic">ⓘ</span>
@@ -417,8 +446,7 @@ function render() {
             Il fallback offline scarica i modelli sul dispositivo al primo utilizzo:
             <b>trascrizione (Whisper)</b> poche decine di MB, <b>riepilogo (modello lingua)</b> alcune centinaia di MB.
             Preparali in <b>Wi‑Fi</b> con "Scarica modelli locali ora": durante il download
-            <b>l'app mantiene lo schermo acceso</b>; se il tuo dispositivo non lo consente,
-            tienilo acceso manualmente fino al completamento.
+            <b>l'app mantiene lo schermo acceso</b>.
           </span>
         </div>
         <div class="dl-area" id="dlArea" hidden>
@@ -428,11 +456,11 @@ function render() {
             <div class="dl-stepcount" id="dlStepCount">1 di 2</div>
           </div>
           <div class="dl-file">
-            <span class="fname" id="dlFile">…</span>
+            <span id="dlFile">…</span>
             <span id="dlPct">0%</span>
           </div>
           <div class="dl-bar"><div class="dl-fill" id="dlFill"></div></div>
-          <div class="dl-meta">
+          <div class="dl-meta" style="display:flex;justify-content:space-between;margin-top:var(--space-xs);font-size:.8125rem;color:var(--on-surface-variant)">
             <span id="dlLoaded">0 MB</span>
             <span id="dlTotal">di 0 MB</span>
           </div>
@@ -442,16 +470,7 @@ function render() {
             <span>Modelli locali pronti in cache. Il fallback funzionerà anche senza rete.</span>
           </div>
         </div>
-      </section>
-
-      <section class="card">
-        <div class="section-label">Privacy</div>
-        <p class="muted">
-          Le chiavi restano su questo dispositivo e vengono inviate solo ai
-          provider corrispondenti. Senza chiavi utilizzabili, l'audio non
-          esce dal dispositivo: elaborazione locale.
-        </p>
-      </section>
+      </details>
     </main>
   `;
 
@@ -463,10 +482,10 @@ function render() {
   };
 
   const drop = $("#drop");
-  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("dragover"); };
-  drop.ondragleave = () => drop.classList.remove("dragover");
+  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+  drop.ondragleave = () => drop.classList.remove("over");
   drop.ondrop = (e) => {
-    e.preventDefault(); drop.classList.remove("dragover");
+    e.preventDefault(); drop.classList.remove("over");
     const file = e.dataTransfer?.files?.[0];
     if (file) process(file);
   };
@@ -506,7 +525,6 @@ function render() {
   buildProviderDD();
   buildLocalDD();
 
-  /* ===== TL;DR ===== */
   document.querySelectorAll(".seg button").forEach((b) => {
     b.onclick = () => {
       const group = b.closest(".seg").dataset.group;
@@ -577,7 +595,6 @@ function render() {
     } catch (error) { if (error?.name !== "AbortError") { console.error(error); stat("Impossibile condividere il testo.", 0); } }
   };
 
-  /* ===== Chiavi ===== */
   $("#saveKey").onclick = async () => {
     const key = $("#apiKey").value.trim();
     const msg = $("#keysMsg");
@@ -803,7 +820,7 @@ function renderKeyList() {
 
     if (entry.id !== "local") {
       const tog = document.createElement("button");
-      tog.className = "btn ghost"; tog.textContent = "dettagli";
+      tog.className = "btn"; tog.textContent = "dettagli"; tog.style.minHeight = "32px"; tog.style.padding = "0 12px"; tog.style.fontSize = ".75rem";
       li.appendChild(tog);
       const det = document.createElement("div");
       det.className = "details";
@@ -826,26 +843,26 @@ async function openDetails(det, entry, force) {
     return;
   }
   det.innerHTML = `
-    <button class="kmodels btn secondary">Aggiorna modelli disponibili</button>
+    <button class="kmodels btn" style="align-self:flex-start">Aggiorna modelli disponibili</button>
     <p class="kmsg muted"></p>
     <label class="muted">Modello trascrizione (solo audio)</label>
     <div class="ddhost" data-slot="stt"></div>
-    <div class="sugg" data-sugg="stt"></div>
-    <p class="note" data-note="stt"></p>
+    <div class="chip" data-sugg="stt" style="margin-top:var(--space-xs)"></div>
+    <p class="note" data-note="stt" style="margin-top:var(--space-xs)"></p>
     <div class="actions">
       <button class="btn primary" data-savepref="stt">Salva preferenza modello</button>
       <span class="chip ok" data-chip="stt" hidden></span>
     </div>
-    <label class="muted">Modello riepilogo (solo chat)</label>
+    <label class="muted" style="margin-top:var(--space-md)">Modello riepilogo (solo chat)</label>
     <div class="ddhost" data-slot="llm"></div>
-    <div class="sugg" data-sugg="llm"></div>
-    <p class="note" data-note="llm"></p>
+    <div class="chip" data-sugg="llm" style="margin-top:var(--space-xs)"></div>
+    <p class="note" data-note="llm" style="margin-top:var(--space-xs)"></p>
     <div class="actions">
       <button class="btn primary" data-savepref="llm">Salva preferenza modello</button>
       <span class="chip ok" data-chip="llm" hidden></span>
     </div>
     <div class="lasterr"></div>
-    <button class="kremove btn ghost">Rimuovi chiave</button>`;
+    <button class="kremove btn" style="align-self:flex-start">Rimuovi chiave</button>`;
 
   const msg = det.querySelector(".kmsg");
   msg.textContent = "Carico i modelli con questa chiave…";
@@ -983,7 +1000,7 @@ function enableSort(listEl) {
   });
 }
 
-/* ===== Modelli locali con progress ===== */
+/* ===== Modelli locali ===== */
 async function decode(file) {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) throw new Error("Il browser non supporta la decodifica audio richiesta.");
@@ -1043,7 +1060,7 @@ async function getLLM(showProgress) {
 async function localTranscribe(file, audio) {
   const a = audio || await decode(file);
   if (!asr) {
-    stat("Primo uso della trascrizione locale: scarico il modello Whisper (può richiedere alcuni minuti)…", 30);
+    stat("Primo uso della trascrizione locale: scarico il modello Whisper…", 30);
   } else {
     stat("Trascrizione locale in corso…", 30);
   }
@@ -1053,7 +1070,7 @@ async function localTranscribe(file, audio) {
 }
 async function localSummarize(transcript, instruction) {
   if (!llm) {
-    stat("Primo uso del riepilogo locale: scarico il modello TL;DR (può richiedere alcuni minuti)…", 75);
+    stat("Primo uso del riepilogo locale: scarico il modello TL;DR…", 75);
   } else {
     stat("Creo il riepilogo TL;DR locale…", 75);
   }
@@ -1063,7 +1080,7 @@ async function localSummarize(transcript, instruction) {
   return (output[0]?.generated_text || "").replace(prompt, "").trim();
 }
 
-/* ===== Retry: scelto → suggerito → (catena) ===== */
+/* ===== Retry ===== */
 async function callWithRetry(entry, slot, pct, makeCall) {
   const chosen = slot === "stt" ? entry.sttModel : entry.llmModel;
   const sugg = entrySugg(entry, slot);
