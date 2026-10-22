@@ -224,11 +224,8 @@ function stat(message, percent) {
   if (eq) eq.hidden = !(percent > 0 && percent < 100);
 }
 
-const LOGO_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true">
-  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
-  <path d="M19 10v2a7 7 0 0 1-14 0v-2" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
-  <path d="M12 19v3M9 22h6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
-</svg>`;
+const SHIELD_SVG = `<svg viewBox="0 -960 960 960"><path d="M480-80q-82 0-155-31.5t-127.5-86Q143-252 111.5-325T80-480q0-85 32-158t87.5-127q55.5-54 130-84.5T489-880q79 0 150 26.5T763.5-780q53.5 47 85 111.5T880-527q0 108-63 170.5T650-294h-75q-18 0-31 14t-13 31q0 27 14.5 46t14.5 44q0 38-21 58.5T480-80Z"/></svg>`;
+const CHEVRON_SVG = `<svg class="chev" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>`;
 const CHEV_SVG = `<svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>`;
 const TICK_SVG = `<svg class="tick" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M378-246 154-470l43-43 181 181 384-384 43 43-427 427Z"/></svg>`;
 
@@ -296,7 +293,7 @@ function render() {
         <p class="sub">Condividi un audio da WhatsApp oppure selezionalo qui. L'app prova le chiavi in ordine e chiude con i modelli locali.</p>
       </div>
 
-      <section class="card">
+      <section class="card" style="margin-top:0">
         <div class="card-label">Cosa fa l'app</div>
         <div class="feature-grid">
           <div class="feature-item">
@@ -356,121 +353,139 @@ function render() {
         </div>
       </div>
 
-      <div id="resultTldr" class="card">
-        <div class="card-label">Riepilogo TL;DR</div>
-        <p class="note" id="autoNote" style="margin-bottom:var(--space-md)"></p>
+      <div class="faq">
+        <details class="faq-item t0" id="faqTldr">
+          <summary>
+            <span class="si" aria-hidden="true">${SHIELD_SVG}</span>
+            <span class="ttl">Riepilogo TL;DR</span>
+            ${CHEVRON_SVG}
+          </summary>
+          <div class="faq-body">
+            <p class="note" id="autoNote" style="margin:0 0 var(--space-sm)"></p>
 
-        <div class="field-label" style="margin-top:0">Lunghezza</div>
-        <div class="seg" data-group="len">
-          <button data-v="breve">Breve · 1 frase</button>
-          <button data-v="medio">Medio · 3 frasi</button>
-          <button data-v="lungo">Lungo · paragrafo</button>
-        </div>
+            <div class="field-label" style="margin-top:0">Lunghezza</div>
+            <div class="seg" data-group="len">
+              <button data-v="breve">Breve · 1 frase</button>
+              <button data-v="medio">Medio · 3 frasi</button>
+              <button data-v="lungo">Lungo · paragrafo</button>
+            </div>
 
-        <div class="field-label">Stile</div>
-        <div class="seg" data-group="style">
-          <button data-v="narrativo">Narrativo</button>
-          <button data-v="elenco">Elenco puntato</button>
-          <button data-v="azioni">Azioni e scadenze</button>
-          <button data-v="formale">Formale</button>
-          <button data-v="informale">Amichevole</button>
-        </div>
+            <div class="field-label">Stile</div>
+            <div class="seg" data-group="style">
+              <button data-v="narrativo">Narrativo</button>
+              <button data-v="elenco">Elenco puntato</button>
+              <button data-v="azioni">Azioni e scadenze</button>
+              <button data-v="formale">Formale</button>
+              <button data-v="informale">Amichevole</button>
+            </div>
 
-        <div class="field-label">Lingua del riepilogo</div>
-        <div class="seg" data-group="lang">
-          <button data-v="it">Italiano</button>
-          <button data-v="auto">Automatica · lingua dell'audio</button>
-        </div>
+            <div class="field-label">Lingua del riepilogo</div>
+            <div class="seg" data-group="lang">
+              <button data-v="it">Italiano</button>
+              <button data-v="auto">Automatica · lingua dell'audio</button>
+            </div>
 
-        <div class="field-label">Istruzioni personalizzate <span class="muted">(opzionali)</span></div>
-        <input id="tldrCustom" type="text" placeholder="es. evidenzia solo date e nomi di persone">
+            <div class="field-label">Istruzioni personalizzate <span class="muted">(opzionali)</span></div>
+            <input id="tldrCustom" type="text" placeholder="es. evidenzia solo date e nomi di persone">
 
-        <div class="field-label">Anteprima del prompt inviato al modello</div>
-        <div class="prompt-box" id="promptBox"></div>
+            <div class="field-label">Anteprima del prompt inviato al modello</div>
+            <div class="prompt-box" id="promptBox"></div>
 
-        <div class="field-label">Preset salvati</div>
-        <div class="preset-row" id="presetRow"></div>
-        <div class="preset-row">
-          <input id="presetName" type="text" placeholder="Nome del preset (es. Scadenze rapide)" style="flex:1;min-width:160px">
-          <button id="savePreset" class="btn">Salva preset</button>
-        </div>
+            <div class="field-label">Preset salvati</div>
+            <div class="preset-row" id="presetRow"></div>
+            <div class="preset-row">
+              <input id="presetName" type="text" placeholder="Nome del preset (es. Scadenze rapide)" style="flex:1;min-width:160px">
+              <button id="savePreset" class="btn">Salva preset</button>
+            </div>
 
-        <div class="actions">
-          <button id="regen" class="btn primary">Genera TL;DR</button>
-        </div>
+            <div class="actions">
+              <button id="regen" class="btn primary">Genera TL;DR</button>
+            </div>
 
-        <div class="chips" style="margin-top:var(--space-md)">
-          <span class="chip" id="chipLlm" hidden>Motore: <b id="engLlm"></b></span>
-        </div>
-        <div id="sum" class="tldr-box">Il TL;DR comparirà qui dopo l'elaborazione.</div>
-        <p id="tldrMeta" class="muted" style="margin-top:var(--space-sm)"></p>
+            <div class="chips" style="margin-top:var(--space-md)">
+              <span class="chip" id="chipLlm" hidden>Motore: <b id="engLlm"></b></span>
+            </div>
+            <div id="sum" class="tldr-box">Il TL;DR comparirà qui dopo l'elaborazione.</div>
+            <p id="tldrMeta" class="muted" style="margin-top:var(--space-sm)"></p>
 
-        <div class="actions">
-          <button id="all" class="btn primary" disabled>Copia tutto</button>
-          <button id="save" class="btn" disabled>Salva</button>
-        </div>
+            <div class="actions">
+              <button id="all" class="btn primary" disabled>Copia tutto</button>
+              <button id="save" class="btn" disabled>Salva</button>
+            </div>
+          </div>
+        </details>
+
+        <details class="faq-item t1" id="faqKeys">
+          <summary>
+            <span class="si" aria-hidden="true">${SHIELD_SVG}</span>
+            <span class="ttl">Chiavi API e priorità</span>
+            ${CHEVRON_SVG}
+          </summary>
+          <div class="faq-body">
+            <div class="dd" id="ddProvider"></div>
+            <input id="apiKey" type="password" placeholder="Incolla qui la chiave API" style="margin-top:var(--space-sm)">
+            <input id="baseUrl" type="text" placeholder="URL base (solo Personalizzato)" style="margin-top:var(--space-sm)">
+            <div class="actions">
+              <button id="saveKey" class="btn primary">Salva API key</button>
+            </div>
+            <p id="keysMsg" class="muted" style="margin-top:var(--space-sm)"></p>
+            <ul id="keyList" class="chain-list"></ul>
+            <div class="actions">
+              <button id="saveChain" class="btn primary">Salva ordine provider</button>
+              <span id="unsavedChip" class="chip warn" hidden>Modifiche non salvate</span>
+            </div>
+            <p id="prefMsg" class="muted" style="margin-top:var(--space-sm)"></p>
+            <p class="muted" style="margin-top:var(--space-sm)">
+              Le modifiche alla catena restano in bozza finché non premi "Salva ordine provider".
+            </p>
+          </div>
+        </details>
+
+        <details class="faq-item t2" id="faqLocal">
+          <summary>
+            <span class="si" aria-hidden="true">${SHIELD_SVG}</span>
+            <span class="ttl">Modelli locali (fallback offline)</span>
+            ${CHEVRON_SVG}
+          </summary>
+          <div class="faq-body">
+            <div id="ddLocal"></div>
+            <div class="actions">
+              <button id="preload" class="btn">Scarica modelli locali ora</button>
+            </div>
+            <div class="wl-banner" id="wlBanner" hidden></div>
+            <div class="disclaimer">
+              <span class="ic">ⓘ</span>
+              <span>
+                Il fallback offline scarica i modelli sul dispositivo al primo utilizzo:
+                <b>trascrizione (Whisper)</b> poche decine di MB, <b>riepilogo (modello lingua)</b> alcune centinaia di MB.
+                Preparali in <b>Wi‑Fi</b> con "Scarica modelli locali ora": durante il download
+                <b>l'app mantiene lo schermo acceso</b>.
+              </span>
+            </div>
+            <div class="dl-area" id="dlArea" hidden>
+              <div class="dl-head">
+                <div class="spinner" id="dlSpinner"></div>
+                <div class="dl-step" id="dlStep">Modello trascrizione (Whisper)</div>
+                <div class="dl-stepcount" id="dlStepCount">1 di 2</div>
+              </div>
+              <div class="dl-file">
+                <span id="dlFile">…</span>
+                <span id="dlPct">0%</span>
+              </div>
+              <div class="dl-bar"><div class="dl-fill" id="dlFill"></div></div>
+              <div class="dl-meta" style="display:flex;justify-content:space-between;margin-top:var(--space-xs);font-size:.8125rem;color:var(--on-surface-variant)">
+                <span id="dlLoaded">0 MB</span>
+                <span id="dlTotal">di 0 MB</span>
+              </div>
+              <div class="dl-list" id="dlList"></div>
+              <div class="dl-done" id="dlDone" hidden>
+                <span class="dl-check">✓</span>
+                <span>Modelli locali pronti in cache. Il fallback funzionerà anche senza rete.</span>
+              </div>
+            </div>
+          </div>
+        </details>
       </div>
-
-      <details class="opt t0">
-        <summary>
-          <span class="si" aria-hidden="true"><svg viewBox="0 -960 960 960"><path d="M480-80q-82 0-155-31.5t-127.5-86Q143-252 111.5-325T80-480q0-85 32-158t87.5-127q55.5-54 130-84.5T489-880q79 0 150 26.5T763.5-780q53.5 47 85 111.5T880-527q0 108-63 170.5T650-294h-75q-18 0-31 14t-13 31q0 27 14.5 46t14.5 44q0 38-21 58.5T480-80Z"/></svg></span>
-          <span>Chiavi API e priorità</span>
-        </summary>
-        <div class="dd" id="ddProvider" style="margin-top:var(--space-md)"></div>
-        <input id="apiKey" type="password" placeholder="Incolla qui la chiave API" style="margin-top:var(--space-sm)">
-        <input id="baseUrl" type="text" placeholder="URL base (solo Personalizzato)" style="margin-top:var(--space-sm)">
-        <button id="saveKey" class="btn primary" style="margin-top:var(--space-sm)">Salva API key</button>
-        <p id="keysMsg" class="muted" style="margin-top:var(--space-sm)"></p>
-        <ul id="keyList" class="chain-list"></ul>
-        <div class="actions">
-          <button id="saveChain" class="btn primary">Salva ordine provider</button>
-          <span id="unsavedChip" class="chip warn" hidden>Modifiche non salvate</span>
-        </div>
-        <p id="prefMsg" class="muted"></p>
-        <p class="muted" style="margin-top:var(--space-sm)">
-          Le modifiche alla catena restano in bozza finché non premi "Salva ordine provider".
-        </p>
-      </details>
-
-      <details class="opt t1">
-        <summary>
-          <span class="si" aria-hidden="true"><svg viewBox="0 -960 960 960"><path d="M480-80q-82 0-155-31.5t-127.5-86Q143-252 111.5-325T80-480q0-85 32-158t87.5-127q55.5-54 130-84.5T489-880q79 0 150 26.5T763.5-780q53.5 47 85 111.5T880-527q0 108-63 170.5T650-294h-75q-18 0-31 14t-13 31q0 27 14.5 46t14.5 44q0 38-21 58.5T480-80Z"/></svg></span>
-          <span>Modelli locali (fallback offline)</span>
-        </summary>
-        <div id="ddLocal" style="margin-top:var(--space-md)"></div>
-        <button id="preload" class="btn" style="margin-top:var(--space-sm)">Scarica modelli locali ora</button>
-        <div class="wl-banner" id="wlBanner" hidden></div>
-        <div class="disclaimer">
-          <span class="ic">ⓘ</span>
-          <span>
-            Il fallback offline scarica i modelli sul dispositivo al primo utilizzo:
-            <b>trascrizione (Whisper)</b> poche decine di MB, <b>riepilogo (modello lingua)</b> alcune centinaia di MB.
-            Preparali in <b>Wi‑Fi</b> con "Scarica modelli locali ora": durante il download
-            <b>l'app mantiene lo schermo acceso</b>.
-          </span>
-        </div>
-        <div class="dl-area" id="dlArea" hidden>
-          <div class="dl-head">
-            <div class="spinner" id="dlSpinner"></div>
-            <div class="dl-step" id="dlStep">Modello trascrizione (Whisper)</div>
-            <div class="dl-stepcount" id="dlStepCount">1 di 2</div>
-          </div>
-          <div class="dl-file">
-            <span id="dlFile">…</span>
-            <span id="dlPct">0%</span>
-          </div>
-          <div class="dl-bar"><div class="dl-fill" id="dlFill"></div></div>
-          <div class="dl-meta" style="display:flex;justify-content:space-between;margin-top:var(--space-xs);font-size:.8125rem;color:var(--on-surface-variant)">
-            <span id="dlLoaded">0 MB</span>
-            <span id="dlTotal">di 0 MB</span>
-          </div>
-          <div class="dl-list" id="dlList"></div>
-          <div class="dl-done" id="dlDone" hidden>
-            <span class="dl-check">✓</span>
-            <span>Modelli locali pronti in cache. Il fallback funzionerà anche senza rete.</span>
-          </div>
-        </div>
-      </details>
     </main>
   `;
 
@@ -653,6 +668,7 @@ function fullText() {
 
 function showTldrFail(reasons) {
   hasSummary = false;
+  const ft = $("#faqTldr"); if (ft) ft.open = true;
   const sum = $("#sum");
   sum.classList.remove("loading");
   sum.textContent = "TL;DR non generato. Motivi:\n• " +
@@ -1231,6 +1247,7 @@ function showTranscript(transcript, engine, duration, ms) {
 }
 function showTldr(summary, engine, note, ms) {
   hasSummary = true;
+  const ft = $("#faqTldr"); if (ft) ft.open = true;
   const sum = $("#sum");
   sum.classList.remove("loading");
   sum.textContent = summary;
