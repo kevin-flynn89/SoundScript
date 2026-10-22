@@ -117,22 +117,23 @@ input[type="text"],input[type="password"],select{width:100%;max-width:100%;paddi
 input:focus,select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 18%,transparent)}
 input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transparent)}
 
-/* ===== DROPDOWN ===== */
+/* ===== DROPDOWN CON TESTO CENTRATO ===== */
 .dd{position:relative;z-index:1;min-width:0}
 .dd.open{z-index:80}
-.dd-btn{width:100%;display:flex;align-items:center;gap:10px;padding:13px 16px;border:1px solid var(--outline);border-radius:var(--radius-md);background:var(--sc-lowest);font:inherit;color:var(--on-surface);cursor:pointer;transition:all .2s;text-align:center}
+.dd-btn{position:relative;width:100%;display:flex;align-items:center;padding:13px 16px;border:1px solid var(--outline);border-radius:var(--radius-md);background:var(--sc-lowest);font:inherit;color:var(--on-surface);cursor:pointer;transition:all .2s}
 .dd-btn:hover{border-color:var(--primary)}
-.dd-btn .val{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
-.dd-btn .chev{color:var(--on-surface-variant);transition:transform .3s var(--ease);flex:none}
+.dd-btn .val{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:0 28px}
+.dd-btn .chev{position:absolute;right:12px;top:50%;color:var(--on-surface-variant);transition:transform .3s var(--ease);transform:translateY(-50%);pointer-events:none}
 .dd.open .dd-btn{border-color:var(--primary)}
-.dd.open .dd-btn .chev{transform:rotate(180deg)}
+.dd.open .dd-btn .chev{transform:translateY(-50%) rotate(180deg)}
 .dd-menu{position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:90;background:var(--sc-lowest);border:1px solid var(--outline-variant);border-radius:var(--radius-lg);box-shadow:var(--shadow3);padding:var(--space-xs);max-height:280px;overflow:auto;animation:dropin .25s var(--ease2)}
 @keyframes dropin{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
-.dd-item{display:flex;align-items:center;gap:10px;width:100%;padding:12px;border:0;border-radius:var(--radius-md);background:transparent;font:inherit;color:var(--on-surface);cursor:pointer;transition:background .2s}
+.dd-item{position:relative;display:flex;align-items:center;width:100%;padding:12px;border:0;border-radius:var(--radius-md);background:transparent;font:inherit;color:var(--on-surface);cursor:pointer;transition:background .2s}
 .dd-item:hover{background:var(--sc)}
-.dd-item .tick{color:var(--primary);visibility:hidden;flex:none}
-.dd-item .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
-.dd-item .sugg-tag{font-size:.7rem;font-weight:800;letter-spacing:.04em;color:var(--primary);text-transform:uppercase}
+.dd-item .tick{position:absolute;left:12px;top:50%;color:var(--primary);visibility:hidden;transform:translateY(-50%);pointer-events:none}
+.dd-item .name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:0 28px}
+.dd-item:has(.sugg-tag) .name{padding-right:84px}
+.dd-item .sugg-tag{position:absolute;right:12px;top:50%;transform:translateY(-50%);max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.7rem;font-weight:800;letter-spacing:.04em;color:var(--primary);text-transform:uppercase;pointer-events:none}
 .dd-item.sel{background:color-mix(in srgb,var(--primary) 12%,transparent);font-weight:600}
 .dd-item.sel .tick{visibility:visible}
 
@@ -167,7 +168,7 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
 .faq-item[open] summary .chev{transform:rotate(180deg)}
 .faq-body{padding:0 22px 22px;animation:dropin .35s var(--ease2) both}
 
-/* Icone organiche nelle righe */
+/* ===== ICONE ORGANICHE ===== */
 .si{width:40px;height:40px;position:relative;display:grid;place-items:center;flex:none}
 .si::before{content:"";position:absolute;inset:0;background:var(--primary-container);-webkit-mask:center/100% 100% no-repeat;mask:center/100% 100% no-repeat;transition:transform .6s var(--ease)}
 .si>*{position:relative;z-index:1}
@@ -218,13 +219,13 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
 .chain-item .chain-label{flex:1 1 auto;min-width:0;font-weight:500;font-size:.875rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chain-item .rank{font-size:.75rem;font-weight:600;color:var(--primary);background:color-mix(in srgb,var(--primary) 12%,transparent);padding:4px 10px;border-radius:999px;flex:none}
 
-/* ===== DETAILS interni chiave ===== */
+/* ===== DETAILS CHIAVE ===== */
 .details{width:100%;min-width:0;display:none;gap:var(--space-sm);margin-top:var(--space-sm);flex-direction:column}
 .details.open{display:flex}
 .lasterr{font-size:.8125rem;color:var(--on-surface-variant);background:var(--sc);border-radius:var(--radius-md);padding:var(--space-xs) var(--space-sm);overflow-wrap:anywhere}
 .kmsg{font-size:.8125rem;color:var(--on-surface-variant);margin:var(--space-xs) 0;overflow-wrap:anywhere}
 
-/* ===== RESPONSIVE: schermi piccoli ===== */
+/* ===== RESPONSIVE: SCHERMI PICCOLI ===== */
 @media (max-width:520px){
   main{padding:var(--space-sm) var(--space-sm) var(--space-xl)}
   .hero{padding:var(--space-md) var(--space-sm);border-radius:var(--radius-2xl)}
@@ -250,7 +251,7 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
   .si svg{width:17px;height:17px}
 }
 
-/* ===== RESPONSIVE: orizzontale su schermi bassi ===== */
+/* ===== RESPONSIVE: ORIZZONTALE ===== */
 @media (orientation:landscape) and (max-height:520px){
   main{padding:var(--space-sm) var(--space-md) var(--space-lg)}
   .hero{padding:var(--space-sm) var(--space-md);margin-bottom:var(--space-sm)}
@@ -261,7 +262,7 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
   .feature-grid{grid-template-columns:repeat(3,1fr)}
 }
 
-/* ===== Desktop: segmented compatti ===== */
+/* ===== DESKTOP: SEGMENTED COMPATTI ===== */
 @media (min-width:521px){
   .seg{width:fit-content;max-width:100%}
   .seg button{flex:0 1 auto}
