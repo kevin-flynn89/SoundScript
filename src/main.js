@@ -289,7 +289,8 @@ function render() {
   $("#app").innerHTML = `
     <main>
       <div class="hero">
-        <h1>Trascrivi i tuoi vocali.</h1>
+        <img class="hero-logo hero-logo-light" alt="SoundScript" src="logo-light.svg">
+        <img class="hero-logo hero-logo-dark" alt="SoundScript" src="logo-dark.svg">
         <p class="sub">Condividi un audio da WhatsApp oppure selezionalo qui. L'app prova le chiavi in ordine e chiude con i modelli locali.</p>
       </div>
 
