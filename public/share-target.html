@@ -1,1 +1,61 @@
-<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=./?shared=1"><title>VoiceToText</title></head><body>Ricezione audio…</body></html>
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SoundScript — ricezione audio</title>
+<script>
+if ("serviceWorker" in navigator) { navigator.serviceWorker.register("./sw.js").catch(function(){}); }
+</script>
+<style>
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f8fafc;color:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:20px;box-sizing:border-box}
+@media (prefers-color-scheme:dark){body{background:#0f172a;color:#f1f5f9}}
+.box{max-width:420px;text-align:center;background:#fff;border:1px solid #e2e8f0;border-radius:24px;padding:28px 24px;box-shadow:0 4px 16px rgba(15,23,42,.08)}
+@media (prefers-color-scheme:dark){.box{background:#1e293b;border-color:#334155}}
+h1{font-size:1.35rem;margin:0 0 10px}
+p{font-size:.95rem;line-height:1.55;color:#64748b;margin:0 0 10px}
+@media (prefers-color-scheme:dark){p{color:#94a3b8}}
+.btn{display:inline-block;margin-top:8px;padding:12px 22px;border-radius:999px;background:linear-gradient(135deg,#4f46e5,#06b6d4);color:#fff;font-weight:600;text-decoration:none}
+.spin{width:26px;height:26px;margin:0 auto 14px;border:3px solid #e2e8f0;border-top-color:#4f46e5;border-radius:50%;animation:r .8s linear infinite}
+@keyframes r{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<main class="box">
+  <div id="wait">
+    <div class="spin"></div>
+    <h1>Ricezione audio…</h1>
+    <p>Recupero l'audio condiviso da WhatsApp.</p>
+  </div>
+  <div id="first" hidden>
+    <h1>Quasi fatto!</h1>
+    <p>È la prima condivisione su questo dispositivo: SoundScript si è appena <strong>attivato</strong> per ricevere gli audio.</p>
+    <p><strong>Condividi di nuovo lo stesso vocale da WhatsApp ora:</strong> questo secondo tentativo funzionerà, e da qui in poi sempre.</p>
+    <a class="btn" href="./">Apri SoundScript</a>
+  </div>
+  <div id="err" hidden>
+    <h1>Audio non ricevuto</h1>
+    <p>Non ho trovato l'audio condiviso. Riprova a condividerlo da WhatsApp.</p>
+    <a class="btn" href="./">Apri SoundScript</a>
+  </div>
+</main>
+<script>
+(async function () {
+  var CACHE = "soundscript-share-v1";
+  var KEY = new URL("shared-audio", location.href).href;
+  function show(id) { ["wait","first","err"].forEach(function (x) { document.getElementById(x).hidden = (x !== id); }); }
+  if (!("serviceWorker" in navigator) || !("caches" in window)) { show("err"); return; }
+  var hadSw = !!(await navigator.serviceWorker.getRegistration());
+  try { await navigator.serviceWorker.ready; } catch (e) {}
+  var found = null;
+  for (var i = 0; i < 10 && !found; i++) {
+    var c = await caches.open(CACHE);
+    found = await c.match(KEY);
+    if (!found) await new Promise(function (r) { setTimeout(r, 300); });
+  }
+  if (found) { location.replace("./?shared=1"); return; }
+  show(hadSw ? "err" : "first");
+})();
+</script>
+</body>
+</html>
