@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" role="img" aria-label="SoundScript">
+  <defs>
+    <linearGradient id="ss-grad-light" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(8, 8)">
+    <path d="M8 32 Q16 8 24 32 T40 32" fill="none" stroke="url(#ss-grad-light)" stroke-width="6" stroke-linecap="round"/>
+    <path d="M48 22 H72 M48 32 H66 M48 42 H58" fill="none" stroke="#4f46e5" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="72" cy="42" r="4" fill="#06b6d4"/>
+  </g>
+  <text x="96" y="52" font-family="'Roboto Flex', system-ui, sans-serif" font-weight="700" font-size="28" fill="#0f172a" letter-spacing="-0.02em">Sound<tspan fill="#4f46e5">Script</tspan></text>
+</svg>
