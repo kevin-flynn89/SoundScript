@@ -262,7 +262,7 @@ function makeDropdown(host, opts) {
     it.setAttribute("role", "option");
     it.setAttribute("aria-selected", o.id === opts.value ? "true" : "false");
     it.innerHTML = `${TICK_SVG}<span class="name"></span>` +
-      (opts.suggId && o.id === opts.suggId ? `<span class="sugg-tag">modello suggerito</span>` : "");
+      (opts.suggId && o.id === opts.suggId ? `<span class="star-tag">⭐</span>` : "");
     it.querySelector(".name").textContent = o.label;
     it.onclick = (e) => {
       e.stopPropagation();
@@ -832,7 +832,7 @@ function renderKeyList() {
     lab.className = "chain-label";
     lab.textContent = entry.id === "local"
       ? "Fallback offline (modelli locali)"
-      : entryLabel(entry) + " · " + (entry.apiKey || "").slice(0, 6) + "…";
+      : entryLabel(entry);
     li.appendChild(lab);
 
     if (entry.id !== "local") {
