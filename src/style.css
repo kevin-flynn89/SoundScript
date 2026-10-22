@@ -269,3 +269,6 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
 @media (max-width:520px){
   .hero-logo{max-width:260px}
 }
+/* Centra il testo nei menu a tendina */
+.dd-btn .val { text-align: center; }
+.dd-item .name { text-align: center; }
