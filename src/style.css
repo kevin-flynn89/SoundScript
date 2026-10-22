@@ -108,15 +108,16 @@ input[type="text"],input[type="password"],select{width:100%;padding:13px 16px;bo
 input:focus,select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 18%,transparent)}
 input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transparent)}
 
-/* ===== DROPDOWN ===== */
-.dd{position:relative}
+/* ===== DROPDOWN (con correzione sovrapposizione) ===== */
+.dd{position:relative;z-index:1}
+.dd.open{z-index:80}
 .dd-btn{width:100%;display:flex;align-items:center;gap:10px;padding:13px 16px;border:1px solid var(--outline);border-radius:var(--radius-md);background:var(--sc-lowest);font:inherit;color:var(--on-surface);cursor:pointer;transition:all .2s}
 .dd-btn:hover{border-color:var(--primary)}
 .dd-btn .val{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dd-btn .chev{color:var(--on-surface-variant);transition:transform .3s var(--ease)}
 .dd.open .dd-btn{border-color:var(--primary)}
 .dd.open .dd-btn .chev{transform:rotate(180deg)}
-.dd-menu{position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:40;background:var(--sc-lowest);border:1px solid var(--outline-variant);border-radius:var(--radius-lg);box-shadow:var(--shadow3);padding:var(--space-xs);max-height:280px;overflow:auto;animation:dropin .25s var(--ease2)}
+.dd-menu{position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:90;background:var(--sc-lowest);border:1px solid var(--outline-variant);border-radius:var(--radius-lg);box-shadow:var(--shadow3);padding:var(--space-xs);max-height:280px;overflow:auto;animation:dropin .25s var(--ease2)}
 @keyframes dropin{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
 .dd-item{display:flex;align-items:center;gap:10px;width:100%;padding:12px;border:0;border-radius:var(--radius-md);background:transparent;font:inherit;color:var(--on-surface);cursor:pointer;transition:background .2s}
 .dd-item:hover{background:var(--sc)}
@@ -198,7 +199,7 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
 .opt summary::after{content:"";flex:none;width:32px;height:32px;border-radius:50%;background:var(--sc-highest) center/18px no-repeat;transition:transform .4s var(--ease),background-color .2s;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E")}
 .opt[open] summary::after{transform:rotate(180deg);background-color:color-mix(in srgb,var(--primary) 15%,transparent)}
 .opt summary:hover::after{background-color:color-mix(in srgb,var(--primary) 15%,transparent)}
-.opt[open]>*:not(summary){animation:dropin .35s var(--ease2) both}
+.opt[open]>*:not(summary):not(.dd){animation:dropin .35s var(--ease2) both}
 
 /* Icone decorative sezioni */
 .si{width:44px;height:44px;position:relative;display:grid;place-items:center;flex:none}
