@@ -117,7 +117,7 @@ input[type="text"],input[type="password"],select{width:100%;max-width:100%;paddi
 input:focus,select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 18%,transparent)}
 input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transparent)}
 
-/* ===== DROPDOWN CON TESTO CENTRATO ===== */
+/* ===== DROPDOWN (testo centrato + stella) ===== */
 .dd{position:relative;z-index:1;min-width:0}
 .dd.open{z-index:80}
 .dd-btn{position:relative;width:100%;display:flex;align-items:center;padding:13px 16px;border:1px solid var(--outline);border-radius:var(--radius-md);background:var(--sc-lowest);font:inherit;color:var(--on-surface);cursor:pointer;transition:all .2s}
@@ -131,9 +131,8 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
 .dd-item{position:relative;display:flex;align-items:center;width:100%;padding:12px;border:0;border-radius:var(--radius-md);background:transparent;font:inherit;color:var(--on-surface);cursor:pointer;transition:background .2s}
 .dd-item:hover{background:var(--sc)}
 .dd-item .tick{position:absolute;left:12px;top:50%;color:var(--primary);visibility:hidden;transform:translateY(-50%);pointer-events:none}
-.dd-item .name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:0 28px}
-.dd-item:has(.sugg-tag) .name{padding-right:84px}
-.dd-item .sugg-tag{position:absolute;right:12px;top:50%;transform:translateY(-50%);max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.7rem;font-weight:800;letter-spacing:.04em;color:var(--primary);text-transform:uppercase;pointer-events:none}
+.dd-item .name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:0 40px}
+.dd-item .star-tag{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:.95rem;line-height:1;pointer-events:none;filter:drop-shadow(0 1px 2px rgba(251,191,36,.4))}
 .dd-item.sel{background:color-mix(in srgb,var(--primary) 12%,transparent);font-weight:600}
 .dd-item.sel .tick{visibility:visible}
 
