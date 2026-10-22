@@ -117,29 +117,22 @@ input[type="text"],input[type="password"],select{width:100%;max-width:100%;paddi
 input:focus,select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 18%,transparent)}
 input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transparent)}
 
-/* ===== DROPDOWN (FIX centratura provider/modelli) =====
-   Cambiamenti rispetto alla versione originale:
-   - .chev e .tick sono position:absolute → non occupano spazio nel flex
-   - .val e .name hanno padding simmetrico 28px → il testo è centrato nel bottone intero
-   - .sugg-tag è absolute con max-width 72px → contenuto sulla destra
-   - .dd-item:has(.sugg-tag) .name allarga il padding destro a 84px per non sovrapporsi
-*/
+/* ===== DROPDOWN ===== */
 .dd{position:relative;z-index:1;min-width:0}
 .dd.open{z-index:80}
-.dd-btn{position:relative;width:100%;display:flex;align-items:center;padding:13px 16px;border:1px solid var(--outline);border-radius:var(--radius-md);background:var(--sc-lowest);font:inherit;color:var(--on-surface);cursor:pointer;transition:all .2s;text-align:center}
+.dd-btn{width:100%;display:flex;align-items:center;gap:10px;padding:13px 16px;border:1px solid var(--outline);border-radius:var(--radius-md);background:var(--sc-lowest);font:inherit;color:var(--on-surface);cursor:pointer;transition:all .2s;text-align:center}
 .dd-btn:hover{border-color:var(--primary)}
-.dd-btn .val{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:0 28px}
-.dd-btn .chev{position:absolute;right:12px;top:50%;color:var(--on-surface-variant);transition:transform .3s var(--ease);transform:translateY(-50%);pointer-events:none}
+.dd-btn .val{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
+.dd-btn .chev{color:var(--on-surface-variant);transition:transform .3s var(--ease);flex:none}
 .dd.open .dd-btn{border-color:var(--primary)}
-.dd.open .dd-btn .chev{transform:translateY(-50%) rotate(180deg)}
+.dd.open .dd-btn .chev{transform:rotate(180deg)}
 .dd-menu{position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:90;background:var(--sc-lowest);border:1px solid var(--outline-variant);border-radius:var(--radius-lg);box-shadow:var(--shadow3);padding:var(--space-xs);max-height:280px;overflow:auto;animation:dropin .25s var(--ease2)}
 @keyframes dropin{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
-.dd-item{position:relative;display:flex;align-items:center;width:100%;padding:12px;border:0;border-radius:var(--radius-md);background:transparent;font:inherit;color:var(--on-surface);cursor:pointer;transition:background .2s}
+.dd-item{display:flex;align-items:center;gap:10px;width:100%;padding:12px;border:0;border-radius:var(--radius-md);background:transparent;font:inherit;color:var(--on-surface);cursor:pointer;transition:background .2s}
 .dd-item:hover{background:var(--sc)}
-.dd-item .tick{position:absolute;left:12px;top:50%;color:var(--primary);visibility:hidden;transform:translateY(-50%);pointer-events:none}
-.dd-item .name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:0 28px}
-.dd-item:has(.sugg-tag) .name{padding-right:84px}
-.dd-item .sugg-tag{position:absolute;right:12px;top:50%;transform:translateY(-50%);max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.7rem;font-weight:800;letter-spacing:.04em;color:var(--primary);text-transform:uppercase;pointer-events:none}
+.dd-item .tick{color:var(--primary);visibility:hidden;flex:none}
+.dd-item .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
+.dd-item .sugg-tag{font-size:.7rem;font-weight:800;letter-spacing:.04em;color:var(--primary);text-transform:uppercase}
 .dd-item.sel{background:color-mix(in srgb,var(--primary) 12%,transparent);font-weight:600}
 .dd-item.sel .tick{visibility:visible}
 
