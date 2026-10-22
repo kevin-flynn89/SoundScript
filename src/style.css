@@ -258,3 +258,14 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
 }
 
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+/* ===== LOGO NELL'HERO ===== */
+.hero-logo{max-width:320px;width:100%;height:auto;display:block;margin:0 auto var(--space-sm)}
+.hero-logo-light{display:block}
+.hero-logo-dark{display:none}
+@media (prefers-color-scheme:dark){
+  .hero-logo-light{display:none}
+  .hero-logo-dark{display:block}
+}
+@media (max-width:520px){
+  .hero-logo{max-width:260px}
+}
