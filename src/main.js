@@ -18,6 +18,8 @@ let llm = null;
 let busy = false;
 let activeModel = null;
 let hasSummary = false;
+let downloading = false;
+let wakeLock = null;
 
 let draftKeys = null;
 let chainDirty = false;
@@ -166,6 +168,52 @@ async function ensureModels(entry, force) {
   modelCache[entry.id] = cls;
   return cls;
 }
+
+/* ===== Wake Lock: tiene lo schermo acceso durante il download ===== */
+async function requestWakeLock() {
+  try {
+    if ("wakeLock" in navigator) {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => {
+        wakeLock = null;
+        if (downloading && document.visibilityState === "visible") {
+          requestWakeLock().then((ok) => setWlBanner(ok ? "ok" : "warn"));
+        }
+      });
+      return true;
+    }
+  } catch (e) {
+    console.warn("Wake lock non disponibile:", e);
+  }
+  return false;
+}
+async function releaseWakeLock() {
+  if (wakeLock) {
+    try { await wakeLock.release(); } catch (e) {}
+    wakeLock = null;
+  }
+}
+function setWlBanner(mode) {
+  const b = $("#wlBanner");
+  if (!b) return;
+  if (mode === "ok") {
+    b.hidden = false;
+    b.className = "wl-banner ok";
+    b.textContent = "🔆 Schermo mantenuto attivo per il download. Puoi lasciare l'app aperta senza toccare nulla.";
+  } else if (mode === "warn") {
+    b.hidden = false;
+    b.className = "wl-banner warn";
+    b.textContent = "⚠️ Il dispositivo non consente di tenere lo schermo acceso: tienilo attivo finché il download non completa.";
+  } else {
+    b.hidden = true;
+  }
+}
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState === "visible" && downloading && !wakeLock) {
+    const ok = await requestWakeLock();
+    setWlBanner(ok ? "ok" : "warn");
+  }
+});
 
 function stat(message, percent) {
   const status = $("#status");
@@ -362,13 +410,15 @@ function render() {
         <button id="preload" class="btn secondary" style="margin-top:10px">
           Scarica modelli locali ora
         </button>
+        <div class="wl-banner" id="wlBanner" hidden></div>
         <div class="disclaimer">
           <span class="ic">ⓘ</span>
           <span>
             Il fallback offline scarica i modelli sul dispositivo al primo utilizzo:
             <b>trascrizione (Whisper)</b> poche decine di MB, <b>riepilogo (modello lingua)</b> alcune centinaia di MB.
-            Conviene prepararli una volta sola in <b>Wi‑Fi</b> con "Scarica modelli locali ora":
-            dopo restano in cache e funzionano anche senza rete.
+            Preparali in <b>Wi‑Fi</b> con "Scarica modelli locali ora": durante il download
+            <b>l'app mantiene lo schermo acceso</b>; se il tuo dispositivo non lo consente,
+            tienilo acceso manualmente fino al completamento.
           </span>
         </div>
         <div class="dl-area" id="dlArea" hidden>
@@ -424,9 +474,12 @@ function render() {
   $("#preload").onclick = async () => {
     if (busy) return;
     busy = true;
+    downloading = true;
     const btn = $("#preload");
     btn.disabled = true;
     showDlArea();
+    const wlOk = await requestWakeLock();
+    setWlBanner(wlOk ? "ok" : "warn");
     try {
       if (navigator.storage?.persist) await navigator.storage.persist();
       setDlStep("Modello trascrizione (Whisper)", "1 di 2");
@@ -440,6 +493,9 @@ function render() {
       hideDlSpinner();
       stat("Download modelli locali non riuscito: " + (error?.message || error), 0);
     } finally {
+      downloading = false;
+      await releaseWakeLock();
+      setWlBanner(null);
       busy = false;
       btn.disabled = false;
     }
