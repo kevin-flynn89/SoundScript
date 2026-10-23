@@ -77,11 +77,11 @@ h1{font:800 clamp(2rem,6vw,2.5rem)/1 "Roboto Flex",system-ui,sans-serif;font-var
 .feature-item h3{font:600 1rem/1.3 "Roboto Flex",system-ui,sans-serif;margin:0 0 4px}
 .feature-item p{margin:0;font-size:.875rem;color:var(--on-surface-variant);line-height:1.5}
 
-/* ===== DROP ZONE ===== */
-.drop{position:relative;display:block;border:2px dashed var(--outline);border-radius:var(--radius-2xl);padding:100px var(--space-md) var(--space-lg);text-align:center;background:var(--sc-high);cursor:pointer;transition:all .4s var(--ease);margin-top:var(--space-lg)}
-.drop::before{content:"";position:absolute;top:24px;left:50%;width:72px;height:72px;margin-left:-36px;background:var(--secondary-container);-webkit-mask:var(--s-sunny) center/100% 100% no-repeat;mask:var(--s-sunny) center/100% 100% no-repeat;transition:transform .6s var(--ease)}
+/* ===== DROP ZONE (marchio al posto della forma sunny) ===== */
+.drop{position:relative;display:block;border:2px dashed var(--outline);border-radius:var(--radius-2xl);padding:var(--space-lg) var(--space-md);text-align:center;background:var(--sc-high);cursor:pointer;transition:all .4s var(--ease);margin-top:var(--space-lg)}
 .drop:hover,.drop.over{border-color:var(--primary);background:var(--sc-highest);border-radius:56px 32px 56px 32px}
-.drop:hover::before,.drop.over::before{transform:rotate(25deg) scale(1.06)}
+.drop-mark{width:88px;height:64px;display:block;margin:0 auto var(--space-sm);color:var(--on-surface);transition:transform .6s var(--ease)}
+.drop:hover .drop-mark,.drop.over .drop-mark{transform:scale(1.06) rotate(-2deg)}
 .drop strong{display:block;font:700 1.25rem/1.3 "Roboto Flex",system-ui,sans-serif;font-variation-settings:"wdth" 108,"opsz" 28;margin-bottom:6px}
 .drop span{display:block;color:var(--on-surface-variant);font-size:.9375rem}
 
@@ -168,11 +168,11 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
 .faq-item[open] summary .chev{transform:rotate(180deg)}
 .faq-body{padding:0 22px 22px;animation:dropin .35s var(--ease2) both}
 
-/* ===== ICONE ORGANICHE ===== */
-.si{width:40px;height:40px;position:relative;display:grid;place-items:center;flex:none}
+/* ===== ICONE ORGANICHE (glifi stroke) ===== */
+.si{width:40px;height:40px;position:relative;display:grid;place-items:center;flex:none;color:var(--on-primary-container)}
 .si::before{content:"";position:absolute;inset:0;background:var(--primary-container);-webkit-mask:center/100% 100% no-repeat;mask:center/100% 100% no-repeat;transition:transform .6s var(--ease)}
 .si>*{position:relative;z-index:1}
-.si svg{width:20px;height:20px;fill:currentColor;stroke:none;color:var(--on-primary-container)}
+.si svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .faq-item:hover .si::before{transform:rotate(20deg) scale(1.05)}
 .t0 .si::before{-webkit-mask-image:var(--s-cookie);mask-image:var(--s-cookie);background:var(--primary-container)}
 .t1 .si::before{-webkit-mask-image:var(--s-clover);mask-image:var(--s-clover);background:var(--tertiary-container)}
@@ -278,8 +278,8 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
   h1{font-size:clamp(1.75rem,7.5vw,2.25rem)}
   .card{padding:var(--space-sm) var(--space-sm) var(--space-md);border-radius:var(--radius-xl)}
   .feature-grid{grid-template-columns:1fr;gap:var(--space-sm)}
-  .drop{padding:88px var(--space-sm) var(--space-md)}
-  .drop::before{width:60px;height:60px;margin-left:-30px;top:20px}
+  .drop{padding:var(--space-md) var(--space-sm)}
+  .drop-mark{width:72px;height:52px}
   .seg{border-radius:var(--radius-md)}
   .seg button{padding:10px 12px;font-size:.8125rem}
   .actions{gap:var(--space-xs)}
@@ -304,7 +304,7 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
   .hero{padding:var(--space-sm) var(--space-md);margin-bottom:var(--space-sm)}
   .hero::before{width:110px;height:110px}
   .hero::after{display:none}
-  .drop{padding:72px var(--space-md) var(--space-md);margin-top:var(--space-md)}
+  .drop{padding:var(--space-md)}
   .status-row{margin:var(--space-md) 0 var(--space-xs)}
   .feature-grid{grid-template-columns:repeat(3,1fr)}
 }

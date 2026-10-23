@@ -355,7 +355,21 @@ function stat(message, percent) {
   if (eq) eq.hidden = !(percent > 0 && percent < 100);
 }
 
-const SHIELD_SVG = `<svg viewBox="0 -960 960 960"><path d="M480-80q-82 0-155-31.5t-127.5-86Q143-252 111.5-325T80-480q0-85 32-158t87.5-127q55.5-54 130-84.5T489-880q79 0 150 26.5T763.5-780q53.5 47 85 111.5T880-527q0 108-63 170.5T650-294h-75q-18 0-31 14t-13 31q0 27 14.5 46t14.5 44q0 38-21 58.5T480-80Z"/></svg>`;
+/* ===== Icone sezioni (stroke, stile logo) ===== */
+const TLDR_SVG = `<svg viewBox="0 0 24 24"><path d="M4 6h9"/><path d="M4 12h6"/><path d="M4 18h4"/><path d="M17 4l1.5 3.5L22 9l-3.5 1.5L17 14l-1.5-3.5L12 9l3.5-1.5z"/></svg>`;
+const KEY_SVG = `<svg viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="3.5"/><path d="M10 13 19 4"/><path d="M17 6l2 2"/><path d="M14 9l1.5 1.5"/></svg>`;
+const CHIP_SVG = `<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><rect x="10.5" y="10.5" width="3" height="3"/><path d="M10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M2 14h3M19 10h3M19 14h3"/></svg>`;
+const REFRESH_SVG = `<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>`;
+/* Marchio del logo per la drop zone */
+const DROP_MARK_SVG = `<svg class="drop-mark" viewBox="0 0 80 64" aria-hidden="true">
+  <defs><linearGradient id="dz-mark" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#06b6d4"/>
+  </linearGradient></defs>
+  <path d="M8 40 Q16 16 24 40 T40 40" fill="none" stroke="url(#dz-mark)" stroke-width="7" stroke-linecap="round"/>
+  <path d="M48 24 H72 M48 40 H66 M48 56 H58" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="72" cy="56" r="4.5" fill="#06b6d4"/>
+</svg>`;
+
 const CHEVRON_SVG = `<svg class="chev" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>`;
 const CHEV_SVG = `<svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>`;
 const TICK_SVG = `<svg class="tick" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M378-246 154-470l43-43 181 181 384-384 43 43-427 427Z"/></svg>`;
@@ -459,6 +473,7 @@ function render() {
       </section>
 
       <div class="drop" id="drop">
+        ${DROP_MARK_SVG}
         <strong>Trascina qui un audio</strong>
         <span>oppure tocca per scegliere un file</span>
         <button id="pick" class="btn primary" style="margin-top:var(--space-md)">Scegli audio</button>
@@ -488,7 +503,7 @@ function render() {
       <div class="faq">
         <details class="faq-item t0" id="faqTldr">
           <summary>
-            <span class="si" aria-hidden="true">${SHIELD_SVG}</span>
+            <span class="si" aria-hidden="true">${TLDR_SVG}</span>
             <span class="ttl">Riepilogo TL;DR</span>
             ${CHEVRON_SVG}
           </summary>
@@ -549,7 +564,7 @@ function render() {
 
         <details class="faq-item t1" id="faqKeys">
           <summary>
-            <span class="si" aria-hidden="true">${SHIELD_SVG}</span>
+            <span class="si" aria-hidden="true">${KEY_SVG}</span>
             <span class="ttl">Chiavi API e priorità</span>
             ${CHEVRON_SVG}
           </summary>
@@ -575,7 +590,7 @@ function render() {
 
         <details class="faq-item t2" id="faqLocal">
           <summary>
-            <span class="si" aria-hidden="true">${SHIELD_SVG}</span>
+            <span class="si" aria-hidden="true">${CHIP_SVG}</span>
             <span class="ttl">Modelli locali (fallback offline)</span>
             ${CHEVRON_SVG}
           </summary>
@@ -620,7 +635,7 @@ function render() {
 
         <details class="faq-item t3" id="faqInfo">
           <summary>
-            <span class="si" aria-hidden="true">${SHIELD_SVG}</span>
+            <span class="si" aria-hidden="true">${REFRESH_SVG}</span>
             <span class="ttl">Info e aggiornamenti</span>
             ${CHEVRON_SVG}
           </summary>
