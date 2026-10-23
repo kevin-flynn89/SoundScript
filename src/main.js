@@ -12,6 +12,7 @@ const SHARE_CACHE = "soundscript-share-v1";
 const SETTINGS_KEY = "vtt-settings";
 const LASTERR_KEY = "vtt-lasterr";
 const TLDR_AUTO_SECONDS = 60;
+const APP_VERSION = (typeof __APP_VERSION__ === "string") ? __APP_VERSION__ : "build dev";
 
 let asr = null;
 let llm = null;
@@ -26,6 +27,138 @@ let chainDirty = false;
 let providerChoice = "openai";
 const modelCache = {};
 const dlRows = {};
+
+/* ===== Service worker & aggiornamenti ===== */
+let swReg = null;
+let swApplyRequested = false;
+let toastTimer = null;
+
+const TOAST_ICONS = {
+  success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+  warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  update: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>',
+  close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+};
+
+function hideToast() {
+  const t = $("#toast");
+  if (!t) return;
+  t.classList.remove("show");
+  clearTimeout(toastTimer);
+}
+function renderToast(html, sticky) {
+  const t = $("#toast");
+  if (!t) return;
+  clearTimeout(toastTimer);
+  t.classList.remove("show");
+  setTimeout(() => {
+    t.innerHTML = html;
+    t.classList.add("show");
+    if (!sticky) toastTimer = setTimeout(hideToast, 3000);
+  }, 120);
+}
+function showUpdateToast() {
+  const t = $("#toast");
+  if (!t) return;
+  t.className = "toast update";
+  renderToast(`
+    <div class="toast-head">
+      <div class="toast-ico update">${TOAST_ICONS.update}</div>
+      <div class="toast-title">È disponibile una nuova versione</div>
+      <button class="toast-close" data-toast-close aria-label="Chiudi">${TOAST_ICONS.close}</button>
+    </div>
+    <div class="toast-desc">Aggiorna ora per avere le ultime funzionalità e correzioni.</div>
+    <div class="toast-actions">
+      <button class="toast-btn primary" data-toast-update>Aggiorna ora</button>
+      <button class="toast-btn ghost" data-toast-close>Più tardi</button>
+    </div>
+  `, true);
+  t.querySelector("[data-toast-update]").onclick = applySwUpdate;
+  t.querySelectorAll("[data-toast-close]").forEach((b) => (b.onclick = hideToast));
+}
+function showStatusToast(type) {
+  const t = $("#toast");
+  if (!t) return;
+  t.className = "toast";
+  if (type === "success") {
+    renderToast(`
+      <div class="toast-head">
+        <div class="toast-ico success">${TOAST_ICONS.success}</div>
+        <div class="toast-title">App aggiornata</div>
+        <button class="toast-close" data-toast-close aria-label="Chiudi">${TOAST_ICONS.close}</button>
+      </div>
+      <div class="toast-desc">Stai usando l'ultima versione disponibile (${APP_VERSION}).</div>
+    `, false);
+  } else {
+    renderToast(`
+      <div class="toast-head">
+        <div class="toast-ico warning">${TOAST_ICONS.warning}</div>
+        <div class="toast-title">Errore di connessione</div>
+        <button class="toast-close" data-toast-close aria-label="Chiudi">${TOAST_ICONS.close}</button>
+      </div>
+      <div class="toast-desc">Impossibile verificare gli aggiornamenti. Riprova più tardi.</div>
+    `, false);
+  }
+  t.querySelectorAll("[data-toast-close]").forEach((b) => (b.onclick = hideToast));
+}
+function applySwUpdate() {
+  if (swReg && swReg.waiting) {
+    swApplyRequested = true;
+    swReg.waiting.postMessage({ type: "SKIP_WAITING" });
+    const t = $("#toast");
+    if (t) t.className = "toast";
+    renderToast(`
+      <div class="toast-head">
+        <div class="toast-ico update">${TOAST_ICONS.update}</div>
+        <div class="toast-title">Aggiornamento in corso…</div>
+      </div>
+      <div class="toast-desc">L'app si sta ricaricando con la nuova versione.</div>
+    `, false);
+  }
+}
+async function checkForUpdates() {
+  const btn = $("#checkUpdateBtn");
+  const label = $("#checkUpdateLabel");
+  if (btn) btn.disabled = true;
+  if (label) label.innerHTML = '<span class="mini-spinner"></span>';
+  try {
+    if (!("serviceWorker" in navigator) || !swReg) throw new Error("sw-non-disponibile");
+    await swReg.update();
+    await sleep(1200);
+    if (swReg.waiting && navigator.serviceWorker.controller) showUpdateToast();
+    else showStatusToast("success");
+  } catch (err) {
+    showStatusToast("warning");
+  } finally {
+    if (btn) btn.disabled = false;
+    if (label) label.textContent = "Controlla";
+  }
+}
+function setupSwUpdates(reg) {
+  swReg = reg;
+  reg.addEventListener("updatefound", () => {
+    const nw = reg.installing;
+    if (!nw) return;
+    nw.addEventListener("statechange", () => {
+      if (nw.state === "installed" && navigator.serviceWorker.controller) showUpdateToast();
+    });
+  });
+  if (reg.waiting && navigator.serviceWorker.controller) showUpdateToast();
+}
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (swApplyRequested) window.location.reload();
+  });
+  window.addEventListener("load", async () => {
+    try {
+      const reg = await navigator.serviceWorker.register("./sw.js");
+      setupSwUpdates(reg);
+      try { await reg.update(); } catch (e) {}
+    } catch (error) {
+      console.error("Registrazione service worker fallita:", error);
+    }
+  });
+}
 
 function fmtDur(s) {
   const m = Math.floor(s / 60);
@@ -486,7 +619,36 @@ function render() {
             </div>
           </div>
         </details>
+
+        <details class="faq-item t3" id="faqInfo">
+          <summary>
+            <span class="si" aria-hidden="true">${SHIELD_SVG}</span>
+            <span class="ttl">Info e aggiornamenti</span>
+            ${CHEVRON_SVG}
+          </summary>
+          <div class="faq-body">
+            <div class="settings-item">
+              <div>
+                <div class="settings-item-title">Aggiornamenti</div>
+                <div class="settings-item-desc">Verifica manuale se esiste una nuova versione</div>
+              </div>
+              <button class="btn" id="checkUpdateBtn"><span id="checkUpdateLabel">Controlla</span></button>
+            </div>
+            <div class="settings-item">
+              <div>
+                <div class="settings-item-title">Versione corrente</div>
+                <div class="settings-item-desc" id="appVersion">—</div>
+              </div>
+            </div>
+            <p class="muted" style="margin-top:var(--space-sm)">
+              Quando esce una nuova versione compare un toast in basso: "Aggiorna ora" la applica subito,
+              "Più tardi" la rimanda alla prossima apertura.
+            </p>
+          </div>
+        </details>
       </div>
+
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
     </main>
   `;
 
@@ -610,6 +772,10 @@ function render() {
       else { await copyText(text); stat("Testo copiato: puoi incollarlo dove vuoi.", 100); }
     } catch (error) { if (error?.name !== "AbortError") { console.error(error); stat("Impossibile condividere il testo.", 0); } }
   };
+
+  $("#checkUpdateBtn").onclick = checkForUpdates;
+  const ver = $("#appVersion");
+  if (ver) ver.textContent = APP_VERSION;
 
   $("#saveKey").onclick = async () => {
     const key = $("#apiKey").value.trim();
@@ -1292,13 +1458,6 @@ async function loadShared() {
     history.replaceState({}, "", location.pathname);
     stat("Errore nella ricezione dell'audio condiviso. Riprova.", 0);
   }
-}
-
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", async () => {
-    try { await navigator.serviceWorker.register("./sw.js"); console.log("Service worker registrato."); }
-    catch (error) { console.error("Registrazione service worker fallita:", error); }
-  });
 }
 
 render();
