@@ -1,189 +1,233 @@
-export const PROVIDERS = {
-  openai: {
-    family: "openai",
-    label: "OpenAI",
-    base: "https://api.openai.com/v1",
-    recommended: { stt: "whisper-1", llm: "gpt-4o-mini" }
-  },
-  groq: {
-    family: "openai",
-    label: "Groq",
-    base: "https://api.groq.com/openai/v1",
-    recommended: { stt: "whisper-large-v3-turbo", llm: "llama-3.1-8b-instant" }
-  },
-  google: {
-    family: "gemini",
-    label: "Google Gemini",
-    base: "https://generativelanguage.googleapis.com/v1beta",
-    recommended: { stt: "models/gemini-2.0-flash", llm: "models/gemini-2.0-flash-lite" }
-  },
-  custom: {
-    family: "openai",
-    label: "Personalizzato (compatibile OpenAI)",
-    base: "",
-    recommended: { stt: "whisper-1", llm: "gpt-4o-mini" }
-  }
+const ENDPOINTS = {
+  openai:    { label: "OpenAI",         baseUrl: "https://api.openai.com/v1",     family: "openai",
+               recommended: { stt: "gpt-4o-transcribe", llm: "gpt-4o-mini" } },
+  groq:      { label: "Groq",           baseUrl: "https://api.groq.com/openai/v1", family: "openai",
+               recommended: { stt: "whisper-large-v3",     llm: "llama-3.1-8b-instant" } },
+  google:    { label: "Google Gemini",  baseUrl: "https://generativelanguage.googleapis.com/v1beta", family: "google",
+               recommended: { stt: "models/gemini-2.0-flash", llm: "models/gemini-2.0-flash-lite" } },
+  anthropic: { label: "Anthropic",      baseUrl: "https://api.anthropic.com/v1", family: "anthropic",
+               recommended: { stt: null, llm: "claude-3-5-haiku-latest" }, chatOnly: true },
+  mistral:   { label: "Mistral",        baseUrl: "https://api.mistral.ai/v1",   family: "openai",
+               recommended: { stt: "voxtral-mini-transcribe-2507", llm: "mistral-small-latest" } },
+  custom:    { label: "Personalizzato", baseUrl: "",                            family: "openai",
+               recommended: { stt: "gpt-4o-transcribe", llm: "gpt-4o-mini" } }
 };
 
-function baseFor(settings) {
-  const p = PROVIDERS[settings.provider] || PROVIDERS.openai;
-  const raw = settings.provider === "custom" ? (settings.baseUrl || "") : p.base;
-  return raw.replace(/\/+$/, "");
-}
+export const PROVIDERS = ENDPOINTS;
 
-function toBase64(buffer) {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+export async function listModels(entry) {
+  const p = ENDPOINTS[entry.provider] || ENDPOINTS.custom;
+  const base = (entry.baseUrl && entry.baseUrl.trim()) || p.baseUrl;
+  if (!base) return [];
+
+  // Anthropic non espone una lista modelli pubblica via API → elenco fisso
+  if (entry.provider === "anthropic") {
+    return [
+      { id: "claude-opus-4-5",       label: "Claude Opus 4.5" },
+      { id: "claude-sonnet-4-5",     label: "Claude Sonnet 4.5" },
+      { id: "claude-3-5-haiku-latest", label: "Claude 3.5 Haiku (consigliato)" },
+      { id: "claude-3-5-sonnet-latest", label: "Claude 3.5 Sonnet" },
+      { id: "claude-3-opus-latest",   label: "Claude 3 Opus" }
+    ];
   }
-  return btoa(binary);
-}
 
-function httpError(res, label) {
-  const e = new Error(label + " HTTP " + res.status);
-  e.status = res.status;
-  return e;
-}
-
-/* Timeout: nessuna chiamata può restare appesa per sempre */
-function fetchT(url, opts, ms) {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), ms);
-  return fetch(url, Object.assign({}, opts, { signal: ctl.signal }))
-    .finally(() => clearTimeout(timer));
-}
-
-export async function listModels(settings) {
-  const p = PROVIDERS[settings.provider] || PROVIDERS.openai;
-
-  if (p.family === "gemini") {
-    const res = await fetchT(
-      baseFor(settings) + "/models?key=" + encodeURIComponent(settings.apiKey),
-      {}, 30000
-    );
-    if (!res.ok) throw httpError(res, "Elenco modelli");
+  // Google Gemini
+  if (p.family === "google") {
+    const url = base.replace(/\/$/, "") + "/models?key=" + encodeURIComponent(entry.apiKey);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
-    return (data.models || [])
-      .filter((m) =>
-        (m.supportedGenerationMethods || []).includes("generateContent")
-      )
-      .map((m) => ({ id: m.name, label: m.displayName || m.name }));
+    return (data.models || []).map((m) => ({ id: m.name, label: m.name }));
   }
 
-  const res = await fetchT(baseFor(settings) + "/models", {
-    headers: { Authorization: "Bearer " + settings.apiKey }
-  }, 30000);
-  if (!res.ok) throw httpError(res, "Elenco modelli");
+  // OpenAI-compatibili (OpenAI, Groq, Mistral, custom)
+  const url = base.replace(/\/$/, "") + "/models";
+  const res = await fetch(url, {
+    headers: { "Authorization": "Bearer " + entry.apiKey }
+  });
+  if (!res.ok) throw new Error("HTTP " + res.status);
   const data = await res.json();
   return (data.data || []).map((m) => ({ id: m.id, label: m.id }));
 }
 
 export function classifyModels(models, family) {
-  if (family === "gemini") return { stt: models.slice(), chat: models.slice() };
-  const sttRe = /whisper|transcribe|voxtral|audio|speech|stt|parakeet/i;
-  const stt = models.filter((m) => sttRe.test(m.id));
-  const chat = models.filter((m) => !sttRe.test(m.id));
-  return {
-    stt: stt.length ? stt : models.slice(),
-    chat: chat.length ? chat : models.slice()
-  };
+  const stt = [];
+  const chat = [];
+  for (const m of models) {
+    const id = m.id || m.name || "";
+    const low = id.toLowerCase();
+    // STT
+    if (/whisper|transcribe|voxtral|speech|asr|audio/i.test(low) && family !== "anthropic") {
+      stt.push({ id, label: id });
+    } else if (family === "google" && /audio|speech|transcribe/i.test(low)) {
+      stt.push({ id, label: id });
+    } else if (family === "google" && /flash|pro|gemini/i.test(low)) {
+      // Gemini può fare entrambi: va in entrambi
+      stt.push({ id, label: id + " (audio)" });
+      chat.push({ id, label: id });
+    } else if (family === "anthropic") {
+      // Anthropic solo chat
+      chat.push({ id, label: m.label || id });
+    } else {
+      chat.push({ id, label: id });
+    }
+  }
+  return { stt, chat };
 }
 
-export async function apiTranscribe(file, settings) {
-  const p = PROVIDERS[settings.provider] || PROVIDERS.openai;
+export async function apiTranscribe(file, entry) {
+  const p = ENDPOINTS[entry.provider] || ENDPOINTS.custom;
+  if (p.chatOnly) throw new Error("Questo provider non supporta la trascrizione audio");
 
-  if (p.family === "gemini") {
-    const model = settings.sttModel || p.recommended.stt;
-    const b64 = toBase64(await file.arrayBuffer());
-    const res = await fetchT(
-      baseFor(settings) + "/" + model + ":generateContent?key=" +
-        encodeURIComponent(settings.apiKey),
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: "Trascrivi verbatim in italiano il contenuto di questo audio. Rispondi solo con la trascrizione, senza commenti." },
-              { inline_data: { mime_type: file.type || "audio/ogg", data: b64 } }
-            ]
-          }]
-        })
-      },
-      120000
-    );
-    if (!res.ok) throw httpError(res, "API trascrizione");
+  const base = (entry.baseUrl && entry.baseUrl.trim()) || p.baseUrl;
+  const model = entry.sttModel || p.recommended.stt;
+
+  // Google Gemini (audio)
+  if (p.family === "google") {
+    const url = base.replace(/\/$/, "") + "/" + model + ":generateContent?key=" + encodeURIComponent(entry.apiKey);
+    const bytes = await file.arrayBuffer();
+    const mime = file.type || "audio/ogg";
+    const b64 = btoa(String.fromCharCode(...new Uint8Array(bytes)));
+    const body = {
+      contents: [{
+        parts: [
+          { inlineData: { mimeType: mime, data: b64 } },
+          { text: "Trascrivi fedelmente l'audio parola per parola, nella sua lingua originale. Restituisci solo il testo, senza commenti." }
+        ]
+      }]
+    };
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const err = new Error("HTTP " + res.status);
+      err.status = res.status;
+      throw err;
+    }
     const data = await res.json();
-    const text = (data?.candidates?.[0]?.content?.parts || [])
-      .map((x) => x.text || "").join("").trim();
-    if (!text) throw new Error("API trascrizione: testo vuoto");
-    return text;
+    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join(" ") || "";
+    return text.trim();
   }
 
-  const form = new FormData();
-  form.append("file", file, file.name || "audio.ogg");
-  form.append("model", settings.sttModel || p.recommended.stt);
-  form.append("language", "it");
-  const res = await fetchT(baseFor(settings) + "/audio/transcriptions", {
+  // Mistral Voxtral (multipart)
+  if (entry.provider === "mistral") {
+    const url = base.replace(/\/$/, "") + "/audio/transcriptions";
+    const fd = new FormData();
+    fd.append("file", file, file.name || "audio");
+    fd.append("model", model);
+    fd.append("language", "it");
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + entry.apiKey },
+      body: fd
+    });
+    if (!res.ok) {
+      const err = new Error("HTTP " + res.status);
+      err.status = res.status;
+      throw err;
+    }
+    const data = await res.json();
+    return (data.text || "").trim();
+  }
+
+  // OpenAI-compatibili (OpenAI, Groq, custom)
+  const url = base.replace(/\/$/, "") + "/audio/transcriptions";
+  const fd = new FormData();
+  fd.append("file", file, file.name || "audio");
+  fd.append("model", model);
+  fd.append("response_format", "json");
+  const res = await fetch(url, {
     method: "POST",
-    headers: { Authorization: "Bearer " + settings.apiKey },
-    body: form
-  }, 120000);
-  if (!res.ok) throw httpError(res, "API trascrizione");
+    headers: { "Authorization": "Bearer " + entry.apiKey },
+    body: fd
+  });
+  if (!res.ok) {
+    const err = new Error("HTTP " + res.status);
+    err.status = res.status;
+    throw err;
+  }
   const data = await res.json();
-  const text = (data.text || "").trim();
-  if (!text) throw new Error("API trascrizione: testo vuoto");
-  return text;
+  return (data.text || "").trim();
 }
 
-export async function apiSummarize(transcript, settings, instruction) {
-  const p = PROVIDERS[settings.provider] || PROVIDERS.openai;
-  const instr = instruction ||
-    "Riassumi in italiano in massimo 3 frasi. Conserva solo le informazioni importanti. Non inventare dettagli.";
+export async function apiSummarize(transcript, entry, instruction) {
+  const p = ENDPOINTS[entry.provider] || ENDPOINTS.custom;
+  const base = (entry.baseUrl && entry.baseUrl.trim()) || p.baseUrl;
+  const model = entry.llmModel || p.recommended.llm;
+  const prompt = instruction + "\n\nTESTO:\n" + transcript;
 
-  if (p.family === "gemini") {
-    const model = settings.llmModel || p.recommended.llm;
-    const res = await fetchT(
-      baseFor(settings) + "/" + model + ":generateContent?key=" +
-        encodeURIComponent(settings.apiKey),
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: instr + "\n\nTESTO:\n" + transcript }] }]
-        })
+  // Anthropic (Messages API)
+  if (p.family === "anthropic") {
+    const url = base.replace(/\/$/, "") + "/messages";
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "x-api-key": entry.apiKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json"
       },
-      90000
-    );
-    if (!res.ok) throw httpError(res, "API riepilogo");
+      body: JSON.stringify({
+        model: model,
+        max_tokens: 1024,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    if (!res.ok) {
+      const err = new Error("HTTP " + res.status);
+      err.status = res.status;
+      throw err;
+    }
     const data = await res.json();
-    const summary = (data?.candidates?.[0]?.content?.parts || [])
-      .map((x) => x.text || "").join("").trim();
-    if (!summary) throw new Error("API riepilogo: risposta vuota");
-    return summary;
+    const text = (data.content || []).filter((c) => c.type === "text").map((c) => c.text).join(" ");
+    return text.trim();
   }
 
-  const res = await fetchT(baseFor(settings) + "/chat/completions", {
+  // Google Gemini
+  if (p.family === "google") {
+    const url = base.replace(/\/$/, "") + "/" + model + ":generateContent?key=" + encodeURIComponent(entry.apiKey);
+    const body = {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.2 }
+    };
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const err = new Error("HTTP " + res.status);
+      err.status = res.status;
+      throw err;
+    }
+    const data = await res.json();
+    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join(" ") || "";
+    return text.trim();
+  }
+
+  // OpenAI-compatibili
+  const url = base.replace(/\/$/, "") + "/chat/completions";
+  const res = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: "Bearer " + settings.apiKey,
+      "Authorization": "Bearer " + entry.apiKey,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: settings.llmModel || p.recommended.llm,
+      model: model,
+      temperature: 0.2,
       messages: [
-        { role: "system", content: instr },
-        { role: "user", content: transcript }
-      ],
-      max_tokens: 200,
-      temperature: 0.2
+        { role: "system", content: "Sei un assistente che riassume messaggi vocali in modo fedele." },
+        { role: "user", content: prompt }
+      ]
     })
-  }, 90000);
-  if (!res.ok) throw httpError(res, "API riepilogo");
+  });
+  if (!res.ok) {
+    const err = new Error("HTTP " + res.status);
+    err.status = res.status;
+    throw err;
+  }
   const data = await res.json();
-  const summary = (data.choices?.[0]?.message?.content || "").trim();
-  if (!summary) throw new Error("API riepilogo: risposta vuota");
-  return summary;
+  return (data.choices?.[0]?.message?.content || "").trim();
 }

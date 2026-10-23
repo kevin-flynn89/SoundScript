@@ -28,6 +28,16 @@ let providerChoice = "openai";
 const modelCache = {};
 const dlRows = {};
 
+/* ===== Mappa portali chiavi API ===== */
+const KEY_PORTALS = {
+  openai:    { name: "OpenAI",         url: "https://platform.openai.com/api-keys" },
+  groq:      { name: "Groq",           url: "https://console.groq.com/keys" },
+  google:    { name: "Google AI Studio", url: "https://aistudio.google.com/apikey" },
+  anthropic: { name: "Anthropic",      url: "https://console.anthropic.com/settings/keys" },
+  mistral:   { name: "Mistral",        url: "https://console.mistral.ai/api-keys/" },
+  custom:    null
+};
+
 /* ===== Service worker & aggiornamenti ===== */
 let swReg = null;
 let swApplyRequested = false;
@@ -52,7 +62,7 @@ function renderToast(html, sticky) {
   clearTimeout(toastTimer);
   t.classList.remove("show");
   t.innerHTML = html;
-  void t.offsetWidth; /* forza il reflow: l'animazione riparte da zero */
+  void t.offsetWidth;
   t.classList.add("show");
   if (!sticky) toastTimer = setTimeout(hideToast, 3000);
 }
@@ -71,7 +81,7 @@ function showUpdateToast() {
       <button class="toast-btn primary" data-toast-update>Aggiorna ora</button>
       <button class="toast-btn ghost" data-toast-close>Più tardi</button>
     </div>
-  `, true); /* sticky: si chiude solo con una scelta dell'utente */
+  `, true);
 }
 function showStatusToast(type) {
   const t = $("#toast");
@@ -273,12 +283,12 @@ function describeError(err) {
 function suggestModel(list, slot, provider) {
   const p = PROVIDERS[provider] || PROVIDERS.openai;
   const rec = slot === "stt" ? p.recommended.stt : p.recommended.llm;
-  if (list.some((m) => m.id === rec)) return rec;
+  if (rec && list.some((m) => m.id === rec)) return rec;
   if (slot === "stt") {
-    const pref = list.find((m) => /turbo|v3|large|whisper|transcribe/i.test(m.id));
+    const pref = list.find((m) => /turbo|v3|large|whisper|transcribe|voxtral/i.test(m.id));
     if (pref) return pref.id;
   } else {
-    const pref = list.find((m) => /flash-lite|flash|mini|instant|lite|nano|small/i.test(m.id));
+    const pref = list.find((m) => /flash-lite|flash|mini|instant|lite|nano|small|haiku/i.test(m.id));
     if (pref) return pref.id;
   }
   return list[0]?.id || "";
@@ -289,7 +299,7 @@ function entrySugg(entry, slot) {
   const cls = modelCache[entry.id];
   if (cls) return suggestModel(slot === "stt" ? cls.stt : cls.chat, slot, entry.provider);
   const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
-  return slot === "stt" ? p.recommended.stt : p.recommended.llm;
+  return slot === "stt" ? (p.recommended.stt || "") : p.recommended.llm;
 }
 async function ensureModels(entry, force) {
   if (!force && modelCache[entry.id]) return modelCache[entry.id];
@@ -355,12 +365,11 @@ function stat(message, percent) {
   if (eq) eq.hidden = !(percent > 0 && percent < 100);
 }
 
-/* ===== Icone sezioni (stroke, stile logo) ===== */
+/* ===== Icone sezioni ===== */
 const TLDR_SVG = `<svg viewBox="0 0 24 24"><path d="M4 6h9"/><path d="M4 12h6"/><path d="M4 18h4"/><path d="M17 4l1.5 3.5L22 9l-3.5 1.5L17 14l-1.5-3.5L12 9l3.5-1.5z"/></svg>`;
 const KEY_SVG = `<svg viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="3.5"/><path d="M10 13 19 4"/><path d="M17 6l2 2"/><path d="M14 9l1.5 1.5"/></svg>`;
 const CHIP_SVG = `<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><rect x="10.5" y="10.5" width="3" height="3"/><path d="M10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M2 14h3M19 10h3M19 14h3"/></svg>`;
 const REFRESH_SVG = `<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>`;
-/* Marchio del logo per la drop zone */
 const DROP_MARK_SVG = `<svg class="drop-mark" viewBox="0 0 80 64" aria-hidden="true">
   <defs><linearGradient id="dz-mark" x1="0" y1="0" x2="1" y2="1">
     <stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#06b6d4"/>
@@ -428,6 +437,27 @@ function makeDropdown(host, opts) {
       btn.setAttribute("aria-expanded", "true");
     }
   };
+}
+
+/* ===== Riga portale chiavi API ===== */
+function renderKeyPortal(providerId) {
+  const box = $("#keyPortal");
+  if (!box) return;
+  const p = KEY_PORTALS[providerId];
+  let html = "";
+  if (!p) {
+    html = '<span class="kp-ico">ℹ️</span>' +
+           '<span>Endpoint personalizzato compatibile OpenAI: inserisci URL base e chiave del tuo fornitore.</span>';
+  } else {
+    html = '<span class="kp-ico">🔑</span>' +
+           '<span>Non hai una chiave? <a href="' + p.url + '" target="_blank" rel="noopener noreferrer">' +
+           'Ottieni la tua chiave API su ' + p.name +
+           '<span class="kp-ext">↗</span></a></span>';
+  }
+  if (providerId === "anthropic") {
+    html += '<div class="kp-note">⚠️ Anthropic non supporta la trascrizione audio: verrà usato solo per il TL;DR, la trascrizione passerà al prossimo provider della catena.</div>';
+  }
+  box.innerHTML = html;
 }
 
 function render() {
@@ -570,6 +600,7 @@ function render() {
           </summary>
           <div class="faq-body">
             <div class="dd" id="ddProvider"></div>
+            <div class="key-portal" id="keyPortal"></div>
             <input id="apiKey" type="password" placeholder="Incolla qui la chiave API" style="margin-top:var(--space-sm)">
             <input id="baseUrl" type="text" placeholder="URL base (solo Personalizzato)" style="margin-top:var(--space-sm)">
             <div class="actions">
@@ -665,7 +696,7 @@ function render() {
     </main>
   `;
 
-  /* Comandi del toast: delegation, collegati UNA volta sola e sempre vivi */
+  /* Toast delegation */
   const toastEl = $("#toast");
   if (toastEl) {
     toastEl.addEventListener("click", (e) => {
@@ -724,6 +755,7 @@ function render() {
   providerChoice = settings.lastProvider || "openai";
   buildProviderDD();
   buildLocalDD();
+  renderKeyPortal(providerChoice);
 
   document.querySelectorAll(".seg button").forEach((b) => {
     b.onclick = () => {
@@ -819,12 +851,14 @@ function render() {
       entry.suggLlm = suggestModel(cls.chat, "llm", entry.provider);
       entry.sttModel = entry.suggStt;
       entry.llmModel = entry.suggLlm;
-      msg.textContent = "Modelli rilevati. Suggeriti: trascrizione " + entry.suggStt +
-        ", riepilogo " + entry.suggLlm + ". Premi Salva ordine provider per attivare.";
+      msg.textContent = "Modelli rilevati. Suggeriti: trascrizione " + (entry.suggStt || "—") +
+        ", riepilogo " + (entry.suggLlm || "—") + ". Premi Salva ordine provider per attivare.";
     } catch (error) {
       const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
-      entry.suggStt = p.recommended.stt; entry.suggLlm = p.recommended.llm;
-      entry.sttModel = entry.suggStt; entry.llmModel = entry.suggLlm;
+      entry.suggStt = entry.suggStt || p.recommended.stt;
+      entry.suggLlm = entry.suggLlm || p.recommended.llm;
+      entry.sttModel = entry.suggStt;
+      entry.llmModel = entry.suggLlm;
       msg.textContent = "Rilevamento modelli non riuscito (" + (error?.message || error) +
         "): userò i consigliati del provider. Premi Salva ordine provider per attivare.";
     }
@@ -926,6 +960,7 @@ function buildProviderDD() {
       providerChoice = id;
       saveSettings({ lastProvider: id });
       buildProviderDD();
+      renderKeyPortal(id);
     }
   });
 }
@@ -1047,9 +1082,11 @@ async function openDetails(det, entry, force) {
     refreshLastErr(det, entry);
     return;
   }
+  const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
   det.innerHTML = `
     <button class="kmodels btn" style="align-self:flex-start">Aggiorna modelli disponibili</button>
     <p class="kmsg muted"></p>
+    ${p.chatOnly ? '' : `
     <label class="muted">Modello trascrizione (solo audio)</label>
     <div class="ddhost" data-slot="stt"></div>
     <div class="chip" data-sugg="stt" style="margin-top:var(--space-xs)"></div>
@@ -1058,6 +1095,7 @@ async function openDetails(det, entry, force) {
       <button class="btn primary" data-savepref="stt">Salva preferenza modello</button>
       <span class="chip ok" data-chip="stt" hidden></span>
     </div>
+    `}
     <label class="muted" style="margin-top:var(--space-md)">Modello riepilogo (solo chat)</label>
     <div class="ddhost" data-slot="llm"></div>
     <div class="chip" data-sugg="llm" style="margin-top:var(--space-xs)"></div>
@@ -1074,19 +1112,20 @@ async function openDetails(det, entry, force) {
   let cls = null;
   try {
     cls = await ensureModels(entry, !!force);
-    entry.suggStt = suggestModel(cls.stt, "stt", entry.provider);
+    if (!p.chatOnly) entry.suggStt = suggestModel(cls.stt, "stt", entry.provider);
     entry.suggLlm = suggestModel(cls.chat, "llm", entry.provider);
-    if (!entry.sttModel) entry.sttModel = entry.suggStt;
+    if (!p.chatOnly && !entry.sttModel) entry.sttModel = entry.suggStt;
     if (!entry.llmModel) entry.llmModel = entry.suggLlm;
-    msg.textContent = cls.stt.length + " modelli audio e " + cls.chat.length + " modelli chat trovati.";
+    msg.textContent = (p.chatOnly ? "" : cls.stt.length + " modelli audio e ") + cls.chat.length + " modelli chat trovati.";
   } catch (error) {
-    const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
-    entry.suggStt = entry.suggStt || p.recommended.stt;
+    if (!p.chatOnly) {
+      entry.suggStt = entry.suggStt || p.recommended.stt;
+      if (!entry.sttModel) entry.sttModel = entry.suggStt;
+    }
     entry.suggLlm = entry.suggLlm || p.recommended.llm;
-    if (!entry.sttModel) entry.sttModel = entry.suggStt;
     if (!entry.llmModel) entry.llmModel = entry.suggLlm;
     cls = {
-      stt: [{ id: entry.suggStt, label: entry.suggStt }],
+      stt: p.chatOnly ? [] : [{ id: entry.suggStt, label: entry.suggStt }],
       chat: [{ id: entry.suggLlm, label: entry.suggLlm }]
     };
     msg.textContent = "Lettura modelli non riuscita: " + (error?.message || error) + ". Mostro il suggerito.";
@@ -1101,18 +1140,21 @@ async function openDetails(det, entry, force) {
 
 function buildKeyDropdowns(det, entry) {
   const cls = det._cls || { stt: [], chat: [] };
-  makeDropdown(det.querySelector('[data-slot="stt"]'), {
-    value: entry.sttModel,
-    options: cls.stt,
-    suggId: entry.suggStt,
-    ariaLabel: "Modello trascrizione",
-    onChange: (id) => {
-      entry.sttModel = id;
-      markDirty();
-      buildKeyDropdowns(det, entry);
-      refreshKeyNotes(entry, det);
-    }
-  });
+  const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
+  if (!p.chatOnly) {
+    makeDropdown(det.querySelector('[data-slot="stt"]'), {
+      value: entry.sttModel,
+      options: cls.stt,
+      suggId: entry.suggStt,
+      ariaLabel: "Modello trascrizione",
+      onChange: (id) => {
+        entry.sttModel = id;
+        markDirty();
+        buildKeyDropdowns(det, entry);
+        refreshKeyNotes(entry, det);
+      }
+    });
+  }
   makeDropdown(det.querySelector('[data-slot="llm"]'), {
     value: entry.llmModel,
     options: cls.chat,
@@ -1134,7 +1176,8 @@ function wireDetails(det, entry) {
     markDirty();
     renderKeyList();
   };
-  det.querySelector('[data-savepref="stt"]').onclick = () => savePref(entry, "stt", det);
+  const sttBtn = det.querySelector('[data-savepref="stt"]');
+  if (sttBtn) sttBtn.onclick = () => savePref(entry, "stt", det);
   det.querySelector('[data-savepref="llm"]').onclick = () => savePref(entry, "llm", det);
 }
 
@@ -1151,7 +1194,9 @@ function savePref(entry, slot, det) {
 }
 
 function refreshKeyNotes(entry, det) {
-  ["stt", "llm"].forEach((slot) => {
+  const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
+  const slots = p.chatOnly ? ["llm"] : ["stt", "llm"];
+  slots.forEach((slot) => {
     const model = slot === "stt" ? entry.sttModel : entry.llmModel;
     const sugg = slot === "stt" ? entry.suggStt : entry.suggLlm;
     const suggEl = det.querySelector('[data-sugg="' + slot + '"]');
