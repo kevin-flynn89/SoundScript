@@ -1,3 +1,8 @@
+/* Timbro di build: viene sostituito automaticamente da vite.config.js
+   a ogni deploy. Serve solo a far cambiare i byte di questo file,
+   così il browser rileva la nuova versione e mostra il toast. */
+const SW_BUILD = "__SW_BUILD__";
+
 const CORE_CACHE = "soundscript-core-v2";
 const SHARE_CACHE = "soundscript-share-v1";
 const CORE_ASSETS = [
@@ -51,7 +56,7 @@ self.addEventListener("fetch", (event) => {
 
   if (req.method !== "GET" || url.origin !== self.location.origin) return;
 
-  // Navigazioni: prima la rete, così le nuove versioni arrivano subito
+  // Navigazioni: prima la rete, così i nuovi contenuti arrivano subito
   if (req.mode === "navigate") {
     event.respondWith(
       fetch(req)
