@@ -51,11 +51,10 @@ function renderToast(html, sticky) {
   if (!t) return;
   clearTimeout(toastTimer);
   t.classList.remove("show");
-  setTimeout(() => {
-    t.innerHTML = html;
-    t.classList.add("show");
-    if (!sticky) toastTimer = setTimeout(hideToast, 3000);
-  }, 120);
+  t.innerHTML = html;
+  void t.offsetWidth; /* forza il reflow: l'animazione riparte da zero */
+  t.classList.add("show");
+  if (!sticky) toastTimer = setTimeout(hideToast, 3000);
 }
 function showUpdateToast() {
   const t = $("#toast");
@@ -72,9 +71,7 @@ function showUpdateToast() {
       <button class="toast-btn primary" data-toast-update>Aggiorna ora</button>
       <button class="toast-btn ghost" data-toast-close>Più tardi</button>
     </div>
-  `, true);
-  t.querySelector("[data-toast-update]").onclick = applySwUpdate;
-  t.querySelectorAll("[data-toast-close]").forEach((b) => (b.onclick = hideToast));
+  `, true); /* sticky: si chiude solo con una scelta dell'utente */
 }
 function showStatusToast(type) {
   const t = $("#toast");
@@ -99,7 +96,6 @@ function showStatusToast(type) {
       <div class="toast-desc">Impossibile verificare gli aggiornamenti. Riprova più tardi.</div>
     `, false);
   }
-  t.querySelectorAll("[data-toast-close]").forEach((b) => (b.onclick = hideToast));
 }
 function applySwUpdate() {
   if (swReg && swReg.waiting) {
@@ -114,6 +110,8 @@ function applySwUpdate() {
       </div>
       <div class="toast-desc">L'app si sta ricaricando con la nuova versione.</div>
     `, false);
+  } else {
+    hideToast();
   }
 }
 async function checkForUpdates() {
@@ -651,6 +649,15 @@ function render() {
       <div class="toast" id="toast" role="status" aria-live="polite"></div>
     </main>
   `;
+
+  /* Comandi del toast: delegation, collegati UNA volta sola e sempre vivi */
+  const toastEl = $("#toast");
+  if (toastEl) {
+    toastEl.addEventListener("click", (e) => {
+      if (e.target.closest("[data-toast-close]")) { hideToast(); return; }
+      if (e.target.closest("[data-toast-update]")) { applySwUpdate(); return; }
+    });
+  }
 
   $("#pick").onclick = () => $("#file").click();
   $("#file").onchange = (event) => {
