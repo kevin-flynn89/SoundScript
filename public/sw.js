@@ -1,50 +1,102 @@
-const CACHE_NAME = "soundscript-share-v1";
+const CORE_CACHE = "soundscript-core-v2";
+const SHARE_CACHE = "soundscript-share-v1";
+const CORE_ASSETS = [
+  "./",
+  "./index.html",
+  "./manifest.json",
+  "./share-target.html",
+  "./icon-light.svg",
+  "./icon-dark.svg",
+  "./icon-dark-transparent.svg",
+  "./logo-light.svg",
+  "./logo-dark.svg"
+];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(self.skipWaiting());
+  event.waitUntil(
+    caches.open(CORE_CACHE)
+      .then((cache) => cache.addAll(CORE_ASSETS))
+      .catch(() => {})
+  );
+  // Niente skipWaiting: la nuova versione entra solo quando l'utente conferma
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
-    await self.clients.claim();
     const keys = await caches.keys();
     await Promise.all(
       keys
-        .filter((key) => key.startsWith("soundscript-") && key !== CACHE_NAME)
-        .map((key) => caches.delete(key))
+        .filter((k) => k.startsWith("soundscript-core-") && k !== CORE_CACHE)
+        .map((k) => caches.delete(k))
     );
+    await self.clients.claim();
   })());
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("fetch", (event) => {
-  const request = event.request;
-  if (request.method !== "POST") return;
+  const req = event.request;
+  const url = new URL(req.url);
 
-  const url = new URL(request.url);
-  const targetUrl = new URL("share-target.html", self.registration.scope);
-  if (url.origin !== targetUrl.origin || url.pathname !== targetUrl.pathname) return;
+  // Condivisione audio da WhatsApp (POST)
+  if (req.method === "POST" && url.pathname.endsWith("/share-target.html")) {
+    event.respondWith(handleShare(req));
+    return;
+  }
 
-  event.respondWith((async () => {
-    try {
-      const formData = await request.formData();
-      const file = formData.get("audio");
+  if (req.method !== "GET" || url.origin !== self.location.origin) return;
 
-      if (!(file instanceof File) || file.size === 0) {
-        return Response.redirect(new URL("?share-error=1", self.registration.scope).href, 303);
-      }
+  // Navigazioni: prima la rete, così le nuove versioni arrivano subito
+  if (req.mode === "navigate") {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CORE_CACHE).then((c) => c.put("./index.html", copy));
+          return res;
+        })
+        .catch(() => caches.match("./index.html"))
+    );
+    return;
+  }
 
-      const cache = await caches.open(CACHE_NAME);
-      const sharedAudioUrl = new URL("shared-audio", self.registration.scope).href;
-      await cache.put(sharedAudioUrl, new Response(file, {
-        headers: {
-          "Content-Type": file.type || "application/octet-stream",
-          "X-SoundScript-Filename": encodeURIComponent(file.name || "audio")
-        }
-      }));
-
-      return Response.redirect(new URL("?shared=1", self.registration.scope).href, 303);
-    } catch (error) {
-      return Response.redirect(new URL("?share-error=1", self.registration.scope).href, 303);
-    }
-  })());
+  // Asset: cache prima, aggiornamento in background
+  event.respondWith(
+    caches.match(req).then((hit) => {
+      const fresh = fetch(req)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const copy = res.clone();
+            caches.open(CORE_CACHE).then((c) => c.put(req, copy));
+          }
+          return res;
+        })
+        .catch(() => hit);
+      return hit || fresh;
+    })
+  );
 });
+
+async function handleShare(req) {
+  try {
+    const form = await req.formData();
+    const file = form.get("audio") ||
+      Array.from(form.values()).find((v) => v instanceof File);
+    if (!file) return Response.redirect("./?share-error=1", 303);
+    const cache = await caches.open(SHARE_CACHE);
+    await cache.put(
+      new URL("shared-audio", self.location.href).href,
+      new Response(file, {
+        headers: { "X-SoundScript-Filename": encodeURIComponent(file.name || "audio") }
+      })
+    );
+    return Response.redirect("./?shared=1", 303);
+  } catch (err) {
+    return Response.redirect("./?share-error=1", 303);
+  }
+}
