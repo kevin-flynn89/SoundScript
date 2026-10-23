@@ -13,3 +13,4 @@ La PWA include Web Share Target: dopo l'installazione su Android puoi usare **Wh
 
 Nessun backend proprietario e nessuna API key. I modelli AI vengono scaricati al primo utilizzo e l'inferenza avviene localmente.
 edit
+edit2 prova
