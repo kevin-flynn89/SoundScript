@@ -16,7 +16,7 @@
 
 <a id="english"></a>
 
-# 🇧 English
+# 🇬🇧 English
 
 ## What is SoundScript?
 
