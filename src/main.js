@@ -273,6 +273,37 @@ function loadHistory() {
 function saveHistoryList(items) {
   localStorage.setItem("vtt-history", JSON.stringify(items.slice(0, 20)));
 }
+/* Salvataggio automatico a fine elaborazione */
+function pushHistoryEntry() {
+  try {
+    const transcript = ($("#txt") && $("#txt").value) || "";
+    if (!transcript.trim()) return;
+    const items = loadHistory();
+    items.unshift({
+      date: new Date().toISOString(),
+      transcript: transcript,
+      summary: hasSummary ? (($("#sum") && $("#sum").textContent) || "") : "",
+      engine: lastSttEngine || "",
+      dur: lastDurSec
+    });
+    saveHistoryList(items);
+    renderHistory();
+  } catch (e) {
+    console.warn("Salvataggio cronologia non riuscito:", e);
+  }
+}
+/* Quando un TL;DR arriva dopo (rigenerazione), aggiorna la voce più recente senza riepilogo */
+function attachSummaryToLatest(summary) {
+  try {
+    const txt = ($("#txt") && $("#txt").value) || "";
+    const items = loadHistory();
+    for (const it of items) {
+      if (it.transcript === txt && !it.summary) { it.summary = summary; break; }
+    }
+    saveHistoryList(items);
+    renderHistory();
+  } catch (e) {}
+}
 
 /* ===== Ultimi errori ===== */
 function loadLastErrors() {
@@ -565,7 +596,6 @@ function loadHistoryEntry(h) {
   $("#chipLlm").hidden = true;
   $("#regen").textContent = "Genera TL;DR";
   $("#all").disabled = false;
-  $("#save").disabled = false;
   stat("Voce caricata dalla cronologia.", 100);
   $("#resultStt").scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -721,7 +751,6 @@ function render() {
 
             <div class="actions">
               <button id="all" class="btn primary" disabled>Copia tutto</button>
-              <button id="save" class="btn" disabled>Salva</button>
             </div>
           </div>
         </details>
@@ -745,6 +774,9 @@ function render() {
               <button class="btn danger" id="histClear">Svuota cronologia</button>
               <span class="hist-count" id="histShown"></span>
             </div>
+            <p class="muted" style="margin-top:var(--space-sm)">
+              Le elaborazioni completate si salvano da sole su questo dispositivo (massimo 20 voci).
+            </p>
           </div>
         </details>
 
@@ -969,21 +1001,6 @@ function render() {
     await copyText(fullText());
     stat(hasSummary ? "Trascrizione e riepilogo copiati." : "Trascrizione copiata.", 100);
   };
-  $("#save").onclick = () => {
-    try {
-      const items = loadHistory();
-      items.unshift({
-        date: new Date().toISOString(),
-        transcript: $("#txt").value,
-        summary: hasSummary ? $("#sum").textContent : "",
-        engine: lastSttEngine || "",
-        dur: lastDurSec
-      });
-      saveHistoryList(items);
-      renderHistory();
-      stat("Salvato nella cronologia locale.", 100);
-    } catch (error) { console.error(error); stat("Impossibile salvare nella cronologia locale.", 0); }
-  };
   $("#share").onclick = async () => {
     const text = fullText();
     try {
@@ -1066,7 +1083,6 @@ function showTldrFail(reasons) {
   $("#chipLlm").hidden = true;
   $("#regen").textContent = "⟳ Rigenera TL;DR";
   $("#all").disabled = false;
-  $("#save").disabled = false;
 }
 
 /* ===== UI download ===== */
@@ -1626,7 +1642,8 @@ async function process(file) {
       $("#sum").textContent = "Nessun TL;DR per ora: tocca Genera TL;DR se ti serve.";
       $("#regen").textContent = "Genera TL;DR";
     }
-    stat("Completato.", 100);
+    pushHistoryEntry(); /* salvataggio automatico in cronologia */
+    stat("Completato e salvato in cronologia.", 100);
   } catch (error) {
     console.error("Errore durante l'elaborazione:", error);
     stat("Impossibile elaborare l'audio: " + (error?.message || String(error)), 0);
@@ -1644,7 +1661,6 @@ function showTranscript(transcript, engine, duration, ms) {
   $("#durStt").textContent = duration === null ? "n/d" : fmtDur(duration);
   $("#txt").value = transcript;
   $("#all").disabled = false;
-  $("#save").disabled = false;
 }
 function showTldr(summary, engine, note, ms) {
   hasSummary = true;
@@ -1658,7 +1674,7 @@ function showTldr(summary, engine, note, ms) {
   if (note) $("#autoNote").textContent = note;
   updateTldrMeta();
   $("#all").disabled = false;
-  $("#save").disabled = false;
+  attachSummaryToLatest(summary);
 }
 
 async function copyText(text) {
