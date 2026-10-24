@@ -32,6 +32,18 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Generate PNG icons (iOS/PWA)
+        run: |
+          set -e
+          command -v rsvg-convert >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y librsvg2-bin; }
+          mkdir -p dist/icons
+          rsvg-convert -w 180 -h 180 public/icon-light.svg -o dist/icons/apple-touch-180.png
+          rsvg-convert -w 192 -h 192 public/icon-light.svg -o dist/icons/icon-192.png
+          rsvg-convert -w 512 -h 512 public/icon-light.svg -o dist/icons/icon-512.png
+          sed -E 's/rx="[0-9]+"/rx="0"/' public/icon-light.svg > /tmp/icon-maskable.svg
+          rsvg-convert -w 512 -h 512 /tmp/icon-maskable.svg -o dist/icons/icon-maskable-512.png
+          ls -la dist/icons
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
