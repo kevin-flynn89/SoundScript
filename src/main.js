@@ -28,6 +28,12 @@ let providerChoice = "openai";
 const modelCache = {};
 const dlRows = {};
 
+/* ===== Cronologia ===== */
+let lastSttEngine = "";
+let lastDurSec = null;
+let histShowAll = false;
+const HIST_LIMIT = 5;
+
 /* ===== Mappa portali chiavi API ===== */
 const KEY_PORTALS = {
   openai:    { name: "OpenAI",         url: "https://platform.openai.com/api-keys" },
@@ -179,6 +185,11 @@ function fmtMs(ms) {
   if (ms < 60000) return Math.round(ms / 1000) + " s";
   return fmtDur(ms / 1000);
 }
+function fmtHistDate(iso) {
+  try {
+    return new Date(iso).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  } catch (e) { return iso; }
+}
 
 /* ===== Regole TL;DR ===== */
 const TLR_LEN = {
@@ -252,6 +263,15 @@ function composeInstruction(t) {
   p += " Conserva solo le informazioni importanti. Non inventare dettagli.";
   if (t.custom && t.custom.trim()) p += " " + t.custom.trim();
   return p;
+}
+
+/* ===== Cronologia: storage ===== */
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem("vtt-history") || "[]"); }
+  catch { return []; }
+}
+function saveHistoryList(items) {
+  localStorage.setItem("vtt-history", JSON.stringify(items.slice(0, 20)));
 }
 
 /* ===== Ultimi errori ===== */
@@ -367,6 +387,7 @@ function stat(message, percent) {
 
 /* ===== Icone sezioni ===== */
 const TLDR_SVG = `<svg viewBox="0 0 24 24"><path d="M4 6h9"/><path d="M4 12h6"/><path d="M4 18h4"/><path d="M17 4l1.5 3.5L22 9l-3.5 1.5L17 14l-1.5-3.5L12 9l3.5-1.5z"/></svg>`;
+const HIST_SVG = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>`;
 const KEY_SVG = `<svg viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="3.5"/><path d="M10 13 19 4"/><path d="M17 6l2 2"/><path d="M14 9l1.5 1.5"/></svg>`;
 const CHIP_SVG = `<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><rect x="10.5" y="10.5" width="3" height="3"/><path d="M10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M2 14h3M19 10h3M19 14h3"/></svg>`;
 const REFRESH_SVG = `<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>`;
@@ -458,6 +479,121 @@ function renderKeyPortal(providerId) {
     html += '<div class="kp-note">⚠️ Anthropic non supporta la trascrizione audio: verrà usato solo per il TL;DR, la trascrizione passerà al prossimo provider della catena.</div>';
   }
   box.innerHTML = html;
+}
+
+/* ===== Cronologia: rendering ===== */
+function renderHistory() {
+  const listEl = $("#histList");
+  if (!listEl) return;
+  const items = loadHistory();
+  const q = (($("#histSearch") && $("#histSearch").value) || "").trim().toLowerCase();
+  const filtered = items.filter((h) => !q ||
+    (h.transcript || "").toLowerCase().includes(q) ||
+    (h.summary || "").toLowerCase().includes(q) ||
+    fmtHistDate(h.date).toLowerCase().includes(q));
+  const shown = histShowAll ? filtered : filtered.slice(0, HIST_LIMIT);
+  listEl.innerHTML = "";
+
+  shown.forEach((h) => {
+    const idx = items.indexOf(h);
+    const row = document.createElement("div");
+    row.className = "hist-item";
+    row.innerHTML = `
+      <div class="hist-main">
+        <div class="hist-meta">
+          <span class="hist-date"></span>
+          <span class="badge engine"></span>
+          <span class="badge dur"></span>
+          ${h.summary ? '<span class="badge tldr">TL;DR</span>' : ""}
+        </div>
+        <div class="hist-preview"></div>
+      </div>
+      <div class="hist-actions">
+        <button class="icon-btn del" title="Elimina" aria-label="Elimina voce">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>
+        </button>
+      </div>`;
+    row.querySelector(".hist-date").textContent = fmtHistDate(h.date);
+    row.querySelector(".badge.engine").textContent = h.engine || "—";
+    const durB = row.querySelector(".badge.dur");
+    if (h.dur != null && h.dur !== "") durB.textContent = fmtDur(Number(h.dur));
+    else durB.remove();
+    row.querySelector(".hist-preview").textContent = h.transcript || "";
+    row.onclick = () => loadHistoryEntry(h);
+    row.querySelector(".del").onclick = (e) => {
+      e.stopPropagation();
+      items.splice(idx, 1);
+      saveHistoryList(items);
+      renderHistory();
+      stat("Voce eliminata dalla cronologia.", 100);
+    };
+    listEl.appendChild(row);
+  });
+
+  const empty = $("#histEmpty");
+  if (empty) empty.hidden = filtered.length > 0;
+  const count = $("#histCount");
+  if (count) count.textContent = items.length;
+  const shownLbl = $("#histShown");
+  if (shownLbl) shownLbl.textContent = filtered.length ? "mostro " + shown.length + " di " + filtered.length : "";
+  const more = $("#histMore");
+  if (more) {
+    if (filtered.length <= HIST_LIMIT) more.hidden = true;
+    else {
+      more.hidden = false;
+      more.textContent = histShowAll ? "Mostra solo le ultime 5" : "Mostra tutte (" + filtered.length + ")";
+    }
+  }
+}
+
+function loadHistoryEntry(h) {
+  const txt = $("#txt");
+  if (!txt) return;
+  txt.value = h.transcript || "";
+  $("#resultStt").classList.remove("hidden");
+  lastSttEngine = h.engine || "";
+  lastDurSec = (h.dur != null && h.dur !== "") ? Number(h.dur) : null;
+  $("#engStt").textContent = (h.engine || "—") + " · dalla cronologia";
+  $("#durStt").textContent = lastDurSec != null ? fmtDur(lastDurSec) : "n/d";
+  const sum = $("#sum");
+  if (h.summary) {
+    hasSummary = true;
+    sum.textContent = h.summary;
+    const ft = $("#faqTldr"); if (ft) ft.open = true;
+  } else {
+    hasSummary = false;
+    sum.textContent = "Nessun TL;DR salvato per questa voce.";
+  }
+  $("#chipLlm").hidden = true;
+  $("#regen").textContent = "Genera TL;DR";
+  $("#all").disabled = false;
+  $("#save").disabled = false;
+  stat("Voce caricata dalla cronologia.", 100);
+  $("#resultStt").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function exportHistory() {
+  const items = loadHistory();
+  if (!items.length) { stat("Cronologia vuota: niente da esportare.", 0); return; }
+  const blob = new Blob([JSON.stringify(items, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "soundscript-cronologia.json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  stat("Cronologia esportata in JSON.", 100);
+}
+
+function clearHistory() {
+  const items = loadHistory();
+  if (!items.length) return;
+  if (confirm("Eliminare tutte le " + items.length + " trascrizioni salvate? L'operazione non si può annullare.")) {
+    saveHistoryList([]);
+    renderHistory();
+    stat("Cronologia svuotata.", 100);
+  }
 }
 
 function render() {
@@ -592,6 +728,29 @@ function render() {
           </div>
         </details>
 
+        <details class="faq-item t4" id="faqHist">
+          <summary>
+            <span class="si" aria-hidden="true">${HIST_SVG}</span>
+            <span class="ttl">Cronologia</span>
+            <span class="count" id="histCount">0</span>
+            ${CHEVRON_SVG}
+          </summary>
+          <div class="faq-body">
+            <div class="search-wrap">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <input class="search-input" id="histSearch" type="text" placeholder="Cerca nel testo o nella data…" aria-label="Cerca nella cronologia">
+            </div>
+            <div class="hist-list" id="histList"></div>
+            <div class="empty" id="histEmpty" hidden><span class="em">🗂️</span>Nessuna trascrizione salvata, oppure nessun risultato per la ricerca.</div>
+            <div class="hist-footer">
+              <button class="btn ghostline" id="histMore">Mostra tutte</button>
+              <button class="btn" id="histExport">Esporta JSON</button>
+              <button class="btn danger" id="histClear">Svuota cronologia</button>
+              <span class="hist-count" id="histShown"></span>
+            </div>
+          </div>
+        </details>
+
         <details class="faq-item t1" id="faqKeys">
           <summary>
             <span class="si" aria-hidden="true">${KEY_SVG}</span>
@@ -721,6 +880,12 @@ function render() {
     if (file) process(file);
   };
 
+  /* Cronologia wiring */
+  const hs = $("#histSearch"); if (hs) hs.oninput = () => renderHistory();
+  const hm = $("#histMore"); if (hm) hm.onclick = () => { histShowAll = !histShowAll; renderHistory(); };
+  const he = $("#histExport"); if (he) he.onclick = exportHistory;
+  const hc = $("#histClear"); if (hc) hc.onclick = clearHistory;
+
   $("#preload").onclick = async () => {
     if (busy) return;
     busy = true;
@@ -809,13 +974,16 @@ function render() {
   };
   $("#save").onclick = () => {
     try {
-      const items = JSON.parse(localStorage.getItem("vtt-history") || "[]");
+      const items = loadHistory();
       items.unshift({
         date: new Date().toISOString(),
         transcript: $("#txt").value,
-        summary: hasSummary ? $("#sum").textContent : ""
+        summary: hasSummary ? $("#sum").textContent : "",
+        engine: lastSttEngine || "",
+        dur: lastDurSec
       });
-      localStorage.setItem("vtt-history", JSON.stringify(items.slice(0, 20)));
+      saveHistoryList(items);
+      renderHistory();
       stat("Salvato nella cronologia locale.", 100);
     } catch (error) { console.error(error); stat("Impossibile salvare nella cronologia locale.", 0); }
   };
@@ -857,8 +1025,7 @@ function render() {
       const p = PROVIDERS[entry.provider] || PROVIDERS.openai;
       entry.suggStt = entry.suggStt || p.recommended.stt;
       entry.suggLlm = entry.suggLlm || p.recommended.llm;
-      entry.sttModel = entry.suggStt;
-      entry.llmModel = entry.suggLlm;
+      entry.sttModel = entry.suggStt; entry.llmModel = entry.suggLlm;
       msg.textContent = "Rilevamento modelli non riuscito (" + (error?.message || error) +
         "): userò i consigliati del provider. Premi Salva ordine provider per attivare.";
     }
@@ -882,6 +1049,7 @@ function render() {
   updatePrefMsg();
   syncTldrUi();
   renderPresets();
+  renderHistory();
   loadShared();
 }
 
@@ -1472,6 +1640,8 @@ async function process(file) {
 }
 
 function showTranscript(transcript, engine, duration, ms) {
+  lastSttEngine = engine;
+  lastDurSec = duration;
   $("#resultStt").classList.remove("hidden");
   $("#engStt").textContent = engine + " · " + fmtMs(ms);
   $("#durStt").textContent = duration === null ? "n/d" : fmtDur(duration);
