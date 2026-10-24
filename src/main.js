@@ -34,6 +34,13 @@ let lastDurSec = null;
 let histShowAll = false;
 const HIST_LIMIT = 5;
 
+/* ===== Player audio ===== */
+let audioEl = null;
+let audioUrl = null;
+let playerDragging = false;
+let playerSpeedIdx = 0;
+const PLAYER_SPEEDS = [1, 1.25, 1.5, 2, 0.75];
+
 /* ===== Mappa portali chiavi API ===== */
 const KEY_PORTALS = {
   openai:    { name: "OpenAI",         url: "https://platform.openai.com/api-keys" },
@@ -273,7 +280,6 @@ function loadHistory() {
 function saveHistoryList(items) {
   localStorage.setItem("vtt-history", JSON.stringify(items.slice(0, 20)));
 }
-/* Salvataggio automatico a fine elaborazione */
 function pushHistoryEntry() {
   try {
     const transcript = ($("#txt") && $("#txt").value) || "";
@@ -292,7 +298,6 @@ function pushHistoryEntry() {
     console.warn("Salvataggio cronologia non riuscito:", e);
   }
 }
-/* Quando un TL;DR arriva dopo (rigenerazione), aggiorna la voce più recente senza riepilogo */
 function attachSummaryToLatest(summary) {
   try {
     const txt = ($("#txt") && $("#txt").value) || "";
@@ -303,6 +308,90 @@ function attachSummaryToLatest(summary) {
     saveHistoryList(items);
     renderHistory();
   } catch (e) {}
+}
+
+/* ===== Player audio: logica ===== */
+function setPlayingUI(playing) {
+  const ip = $("#icoPlay"), ipa = $("#icoPause"), pl = $("#player");
+  if (ip) ip.toggleAttribute("hidden", playing);
+  if (ipa) ipa.toggleAttribute("hidden", !playing);
+  if (pl) pl.classList.toggle("playing", playing);
+}
+function paintPlayer() {
+  const fill = $("#pFill"), knob = $("#pKnob"), cur = $("#pCur");
+  if (!fill || !audioEl) return;
+  const d = audioEl.duration || 0;
+  const pct = d ? (audioEl.currentTime / d) * 100 : 0;
+  fill.style.width = pct + "%";
+  knob.style.left = pct + "%";
+  cur.textContent = fmtDur(audioEl.currentTime);
+}
+function ensureAudioEl() {
+  if (audioEl) return;
+  audioEl = new Audio();
+  audioEl.preload = "metadata";
+  audioEl.addEventListener("loadedmetadata", () => {
+    const d = $("#pDur");
+    if (d) d.textContent = fmtDur(audioEl.duration);
+    paintPlayer();
+  });
+  audioEl.addEventListener("timeupdate", () => { if (!playerDragging) paintPlayer(); });
+  audioEl.addEventListener("play", () => setPlayingUI(true));
+  audioEl.addEventListener("pause", () => setPlayingUI(false));
+  audioEl.addEventListener("ended", () => setPlayingUI(false));
+
+  const play = $("#pPlay");
+  if (play) play.onclick = () => {
+    if (audioEl.paused) audioEl.play().catch(() => setPlayingUI(false));
+    else audioEl.pause();
+  };
+  const back = $("#pBack");
+  if (back) back.onclick = () => { audioEl.currentTime = Math.max(0, audioEl.currentTime - 10); paintPlayer(); };
+  const fwd = $("#pFwd");
+  if (fwd) fwd.onclick = () => { audioEl.currentTime = Math.min(audioEl.duration || 0, audioEl.currentTime + 10); paintPlayer(); };
+  const sp = $("#pSpeed");
+  if (sp) sp.onclick = () => {
+    playerSpeedIdx = (playerSpeedIdx + 1) % PLAYER_SPEEDS.length;
+    audioEl.playbackRate = PLAYER_SPEEDS[playerSpeedIdx];
+    sp.textContent = String(PLAYER_SPEEDS[playerSpeedIdx]).replace(".", ",") + "×";
+  };
+  const seek = $("#pSeek");
+  if (seek) {
+    const seekTo = (x) => {
+      const r = seek.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (x - r.left) / r.width));
+      audioEl.currentTime = ratio * (audioEl.duration || 0);
+      paintPlayer();
+    };
+    seek.addEventListener("pointerdown", (e) => { playerDragging = true; seek.classList.add("drag"); seek.setPointerCapture(e.pointerId); seekTo(e.clientX); });
+    seek.addEventListener("pointermove", (e) => { if (playerDragging) seekTo(e.clientX); });
+    seek.addEventListener("pointerup", () => { playerDragging = false; seek.classList.remove("drag"); });
+    seek.addEventListener("pointercancel", () => { playerDragging = false; seek.classList.remove("drag"); });
+  }
+}
+function attachAudio(file) {
+  try {
+    ensureAudioEl();
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    audioUrl = URL.createObjectURL(file);
+    audioEl.src = audioUrl;
+    audioEl.currentTime = 0;
+    audioEl.playbackRate = PLAYER_SPEEDS[playerSpeedIdx];
+    const pl = $("#player");
+    if (pl) pl.hidden = false;
+    setPlayingUI(false);
+    const d = $("#pDur"); if (d) d.textContent = "0:00";
+    const c = $("#pCur"); if (c) c.textContent = "0:00";
+    paintPlayer();
+  } catch (e) {
+    console.warn("Player audio non disponibile:", e);
+  }
+}
+function detachAudio() {
+  if (audioEl) audioEl.pause();
+  const pl = $("#player");
+  if (pl) pl.hidden = true;
+  setPlayingUI(false);
 }
 
 /* ===== Ultimi errori ===== */
@@ -578,6 +667,7 @@ function renderHistory() {
 function loadHistoryEntry(h) {
   const txt = $("#txt");
   if (!txt) return;
+  detachAudio(); /* niente audio per le voci di cronologia */
   txt.value = h.transcript || "";
   $("#resultStt").classList.remove("hidden");
   lastSttEngine = h.engine || "";
@@ -687,6 +777,23 @@ function render() {
           <span class="chip">Motore: <b id="engStt"></b></span>
           <span class="chip">Durata: <b id="durStt"></b></span>
         </div>
+
+        <div class="player" id="player" hidden>
+          <button class="p-btn" id="pPlay" aria-label="Riproduci o metti in pausa">
+            <svg id="icoPlay" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            <svg id="icoPause" viewBox="0 0 24 24" hidden><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+          </button>
+          <button class="p-btn" id="pBack" aria-label="Indietro di 10 secondi">-10</button>
+          <button class="p-btn" id="pFwd" aria-label="Avanti di 10 secondi">+10</button>
+          <span class="p-time" id="pCur">0:00</span>
+          <div class="p-seek" id="pSeek">
+            <div class="p-fill" id="pFill"></div>
+            <div class="p-knob" id="pKnob"></div>
+          </div>
+          <span class="p-time" id="pDur">0:00</span>
+          <button class="p-speed" id="pSpeed" aria-label="Velocità di riproduzione">1×</button>
+        </div>
+
         <textarea id="txt" aria-label="Testo della trascrizione"></textarea>
         <div class="actions">
           <button id="copy" class="btn">Copia trascrizione</button>
@@ -776,6 +883,7 @@ function render() {
             </div>
             <p class="muted" style="margin-top:var(--space-sm)">
               Le elaborazioni completate si salvano da sole su questo dispositivo (massimo 20 voci).
+              L'audio non viene conservato: il player è disponibile solo per il file appena elaborato.
             </p>
           </div>
         </details>
@@ -1628,6 +1736,7 @@ async function process(file) {
     }
     if (!transcript) throw new Error("Nessuna chiave né il modello locale hanno riconosciuto testo.");
     showTranscript(transcript, sttEngine, duration, performance.now() - tStt);
+    attachAudio(file); /* player sul file appena elaborato */
 
     if (autoTldr) {
       $("#autoNote").textContent = duration === null
@@ -1642,7 +1751,7 @@ async function process(file) {
       $("#sum").textContent = "Nessun TL;DR per ora: tocca Genera TL;DR se ti serve.";
       $("#regen").textContent = "Genera TL;DR";
     }
-    pushHistoryEntry(); /* salvataggio automatico in cronologia */
+    pushHistoryEntry();
     stat("Completato e salvato in cronologia.", 100);
   } catch (error) {
     console.error("Errore durante l'elaborazione:", error);
@@ -1693,14 +1802,14 @@ async function loadShared() {
   try {
     if (!("caches" in window)) throw new Error("La cache del browser non è disponibile.");
     const cache = await caches.open(SHARE_CACHE);
-    const audioUrl = new URL("shared-audio", document.baseURI).href;
-    const response = await cache.match(audioUrl);
+    const audioUrlShared = new URL("shared-audio", document.baseURI).href;
+    const response = await cache.match(audioUrlShared);
     if (!response) { stat("Audio condiviso non trovato. Prova a condividerlo di nuovo.", 0); return; }
     const blob = await response.blob();
     const encoded = response.headers.get("X-SoundScript-Filename") || "audio";
     let filename = "audio";
     try { filename = decodeURIComponent(encoded); } catch { filename = "audio"; }
-    await cache.delete(audioUrl);
+    await cache.delete(audioUrlShared);
     history.replaceState({}, "", location.pathname);
     await process(new File([blob], filename, { type: blob.type || "audio/ogg" }));
   } catch (error) {
