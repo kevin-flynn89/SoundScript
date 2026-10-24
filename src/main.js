@@ -532,8 +532,6 @@ function renderHistory() {
 
   const empty = $("#histEmpty");
   if (empty) empty.hidden = filtered.length > 0;
-  const count = $("#histCount");
-  if (count) count.textContent = items.length;
   const shownLbl = $("#histShown");
   if (shownLbl) shownLbl.textContent = filtered.length ? "mostro " + shown.length + " di " + filtered.length : "";
   const more = $("#histMore");
@@ -732,13 +730,12 @@ function render() {
           <summary>
             <span class="si" aria-hidden="true">${HIST_SVG}</span>
             <span class="ttl">Cronologia</span>
-            <span class="count" id="histCount">0</span>
             ${CHEVRON_SVG}
           </summary>
           <div class="faq-body">
             <div class="search-wrap">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-              <input class="search-input" id="histSearch" type="text" placeholder="Cerca nel testo o nella data…" aria-label="Cerca nella cronologia">
+              <input class="search-input" id="histSearch" type="text" placeholder="Cerca qui…" aria-label="Cerca nella cronologia">
             </div>
             <div class="hist-list" id="histList"></div>
             <div class="empty" id="histEmpty" hidden><span class="em">🗂️</span>Nessuna trascrizione salvata, oppure nessun risultato per la ricerca.</div>
