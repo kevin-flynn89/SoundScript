@@ -64,7 +64,7 @@ const KEY_PORTALS = {
   custom:    null
 };
 
-/* ===== Logo per il foglio di stampa (identico all'hero, versione carta) ===== */
+/* ===== Logo per il foglio di stampa ===== */
 const PRINT_LOGO_SVG =
   '<svg class="pv-logo" viewBox="0 0 320 80" role="img" aria-label="SoundScript">' +
   '<defs><linearGradient id="pvlg" x1="0" y1="0" x2="1" y2="1">' +
@@ -89,6 +89,16 @@ const TOAST_ICONS = {
   update: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>',
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
 };
+
+/* ===== B · Annunci per lettori schermo (regione live unica) ===== */
+let srTimer = null;
+function announce(msg) {
+  const el = $("#srStatus");
+  if (!el) return;
+  el.textContent = "";
+  clearTimeout(srTimer);
+  srTimer = setTimeout(() => { el.textContent = msg; }, 30);
+}
 
 function hideToast() {
   const t = $("#toast");
@@ -157,11 +167,14 @@ async function checkForUpdates() {
     const after = navigator.serviceWorker.controller;
     if (after && after !== before) {
       showInfoToast("Nuova versione installata", "Sarà attiva dal prossimo avvio dell'app.");
+      announce("Nuova versione installata. Sarà attiva dal prossimo avvio.");
     } else {
       showStatusToast("success");
+      announce("App aggiornata. Stai usando l'ultima versione.");
     }
   } catch (err) {
     showStatusToast("warning");
+    announce("Verifica aggiornamenti non riuscita.");
   } finally {
     swCheckInProgress = false;
     if (btn) btn.disabled = false;
@@ -352,6 +365,7 @@ function pushHistoryEntry() {
     });
     saveHistoryList(items);
     renderHistory();
+    announce("Elaborazione completata e salvata in cronologia.");
   } catch (e) {
     console.warn("Salvataggio cronologia non riuscito:", e);
   }
@@ -452,7 +466,7 @@ function detachAudio() {
   setPlayingUI(false);
 }
 
-/* ===== Test chiave API (senza salvare) ===== */
+/* ===== Test chiave API ===== */
 async function testApiKey() {
   const out = $("#testResult");
   if (!out) return;
@@ -471,13 +485,15 @@ async function testApiKey() {
     const cls = classifyModels(models, (PROVIDERS[providerChoice] || PROVIDERS.openai).family);
     out.textContent = "✓ Chiave valida · " + cls.stt.length + " modelli audio e " + cls.chat.length + " modelli chat";
     out.classList.add("ok");
+    announce("Chiave valida. " + cls.stt.length + " modelli audio e " + cls.chat.length + " modelli chat.");
   } catch (err) {
     out.textContent = "✗ " + (describeError(err) || "errore sconosciuto");
     out.classList.add("err");
+    announce("Chiave non valida. " + describeError(err));
   }
 }
 
-/* ===== Pulsante Nuovo (reset sessione) ===== */
+/* ===== Pulsante Nuovo ===== */
 function resetSession() {
   detachAudio();
   hasSummary = false;
@@ -489,6 +505,7 @@ function resetSession() {
   const all = $("#all"); if (all) all.disabled = true;
   const bar = $("#bar"); if (bar) bar.style.width = "0%";
   stat("Pronto.", 0);
+  announce("Campi svuotati. Pronto per un nuovo audio.");
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -820,6 +837,7 @@ function renderHistory() {
       saveHistoryList(items);
       renderHistory();
       stat("Voce eliminata dalla cronologia.", 100);
+      announce("Voce eliminata dalla cronologia.");
     };
     listEl.appendChild(row);
   });
@@ -863,6 +881,7 @@ function loadHistoryEntry(h) {
   $("#regen").textContent = "Genera TL;DR";
   $("#all").disabled = false;
   stat("Voce caricata dalla cronologia.", 100);
+  announce("Voce caricata dalla cronologia.");
   $("#resultStt").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -878,6 +897,7 @@ function exportHistory() {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   stat("Cronologia esportata in JSON.", 100);
+  announce("Cronologia esportata in JSON.");
 }
 
 function clearHistory() {
@@ -887,6 +907,7 @@ function clearHistory() {
     saveHistoryList([]);
     renderHistory();
     stat("Cronologia svuotata.", 100);
+    announce("Cronologia svuotata.");
   }
 }
 
@@ -979,7 +1000,7 @@ function render() {
           <button id="copy" class="btn">Copia trascrizione</button>
           <button id="share" class="btn">Condividi</button>
           <div class="export-wrap">
-            <button class="btn" id="exportBtn" aria-haspopup="menu" aria-expanded="false">⤓ Esporta</button>
+            <button class="btn" id="exportBtn" aria-haspopup="menu" aria-expanded="false"> Esporta</button>
             <div class="export-menu" id="exportMenu" hidden role="menu">
               <button class="xm-item" id="expTxt" role="menuitem">
                 <span class="xm-ico txt">📄</span>
@@ -1262,7 +1283,8 @@ function render() {
         </details>
       </div>
 
-      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+      <div id="srStatus" class="sr-only" role="status" aria-live="polite"></div>
+      <div class="toast" id="toast"></div>
     </main>
   `;
 
@@ -1314,18 +1336,21 @@ function render() {
     closeExportMenu();
     downloadFile("soundscript-" + fileStamp() + ".txt", buildTXT(), "text/plain;charset=utf-8");
     stat("File TXT scaricato.", 100);
+    announce("File di testo scaricato.");
   };
   const exMd = $("#expMd");
   if (exMd) exMd.onclick = () => {
     closeExportMenu();
     downloadFile("soundscript-" + fileStamp() + ".md", buildMD(), "text/markdown;charset=utf-8");
     stat("File Markdown scaricato.", 100);
+    announce("File Markdown scaricato.");
   };
   const exPdf = $("#expPdf");
   if (exPdf) exPdf.onclick = () => {
     closeExportMenu();
     ensurePrintView().innerHTML = buildDocHTML();
     window.print();
+    announce("Dialogo di stampa aperto.");
   };
 
   /* Tema manuale */
@@ -1339,6 +1364,7 @@ function render() {
       saveSettings({ theme: b.dataset.t });
       applyTheme(b.dataset.t);
       stat("Tema: " + b.textContent, 100);
+      announce("Tema impostato su " + b.textContent + ".");
     };
   });
 
@@ -1354,6 +1380,7 @@ function render() {
       }
       updateNotifDesc();
       stat(nt.checked ? "Feedback di fine elaborazione attivo" : "Feedback di fine elaborazione disattivato", 100);
+      announce(nt.checked ? "Avvisi di fine elaborazione attivati." : "Avvisi di fine elaborazione disattivati.");
     };
   }
 
@@ -1377,6 +1404,7 @@ function render() {
       localStorage.setItem("ss-local-ready", "1");
       renderStatusBadges();
       stat("Modelli locali pronti in cache.", 100);
+      announce("Modelli locali scaricati e pronti in cache.");
     } catch (error) {
       hideDlSpinner();
       stat("Download modelli locali non riuscito: " + (error?.message || error), 0);
@@ -1422,6 +1450,7 @@ function render() {
     $("#presetName").value = "";
     renderPresets();
     stat("Preset salvato: " + name, 100);
+    announce("Preset salvato: " + name + ".");
   };
   $("#regen").onclick = async () => {
     const transcript = $("#txt").value.trim();
@@ -1442,10 +1471,15 @@ function render() {
     } finally { busy = false; }
   };
 
-  $("#copy").onclick = async () => { await copyText($("#txt").value); stat("Trascrizione copiata.", 100); };
+  $("#copy").onclick = async () => {
+    await copyText($("#txt").value);
+    stat("Trascrizione copiata.", 100);
+    announce("Trascrizione copiata negli appunti.");
+  };
   $("#all").onclick = async () => {
     await copyText(fullText());
     stat(hasSummary ? "Trascrizione e riepilogo copiati." : "Trascrizione copiata.", 100);
+    announce(hasSummary ? "Trascrizione e riepilogo copiati negli appunti." : "Trascrizione copiata negli appunti.");
   };
   $("#share").onclick = async () => {
     const text = fullText();
@@ -1474,6 +1508,7 @@ function render() {
     const tr = $("#testResult"); if (tr) { tr.textContent = ""; tr.className = "test-result"; }
     markDirty(); renderKeyList();
     msg.textContent = "Chiave aggiunta alla bozza. Rilevo i modelli disponibili…";
+    announce("Chiave aggiunta alla bozza.");
     try {
       const cls = await ensureModels(entry, true);
       entry.suggStt = suggestModel(cls.stt, "stt", entry.provider);
@@ -1502,6 +1537,7 @@ function render() {
     updatePrefMsg();
     renderKeyList();
     renderStatusBadges();
+    announce("Ordine provider salvato e attivo.");
   };
 
   draftKeys = JSON.parse(JSON.stringify(loadSettings().keys));
@@ -1648,6 +1684,7 @@ function renderPresets() {
       saveSettings({ tldr: { len: p.len, style: p.style, lang: p.lang, custom: p.custom || "" } });
       syncTldrUi();
       stat("Preset applicato: " + p.name, 100);
+      announce("Preset applicato: " + p.name + ".");
     };
     x.onclick = (e) => {
       e.stopPropagation();
@@ -1655,6 +1692,7 @@ function renderPresets() {
       s.tldrPresets = s.tldrPresets.filter((_, k) => k !== i);
       saveSettings({ tldrPresets: s.tldrPresets });
       renderPresets();
+      announce("Preset eliminato.");
     };
     c.appendChild(lab); c.appendChild(x);
     row.appendChild(c);
@@ -1679,7 +1717,7 @@ function renderKeyList() {
     li.dataset.id = entry.id;
 
     const handle = document.createElement("span");
-    handle.className = "handle"; handle.dataset.handle = "1"; handle.textContent = "⋮";
+    handle.className = "handle"; handle.dataset.handle = "1"; handle.textContent = "⋮⋮";
     li.appendChild(handle);
 
     const lab = document.createElement("span");
@@ -1807,6 +1845,7 @@ function wireDetails(det, entry) {
     markDirty();
     renderKeyList();
     renderStatusBadges();
+    announce("Chiave rimossa dalla bozza.");
   };
   const sttBtn = det.querySelector('[data-savepref="stt"]');
   if (sttBtn) sttBtn.onclick = () => savePref(entry, "stt", det);
@@ -1823,6 +1862,7 @@ function savePref(entry, slot, det) {
   });
   refreshKeyNotes(entry, det);
   stat("Preferenza salvata: " + (slot === "stt" ? entry.sttModel : entry.llmModel), 100);
+  announce("Preferenza modello salvata.");
 }
 
 function refreshKeyNotes(entry, det) {
@@ -2115,6 +2155,7 @@ async function process(file) {
   } catch (error) {
     if (error && error.name === "AbortError") {
       stat("Elaborazione annullata. Pronto a riprovare.", 0);
+      announce("Elaborazione annullata.");
     } else {
       console.error("Errore durante l'elaborazione:", error);
       stat("Impossibile elaborare l'audio: " + (error?.message || String(error)), 0);

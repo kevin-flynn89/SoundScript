@@ -66,6 +66,27 @@ main{max-width:760px;margin:0 auto;padding:var(--space-md) var(--space-md) 120px
 button,a,summary,input,textarea,select,[role="button"]{-webkit-tap-highlight-color:transparent}
 button{-webkit-appearance:none;appearance:none;touch-action:manipulation}
 
+/* ===== A · FOCUS VISIBILI DA TASTIERA ===== */
+.btn:focus-visible,
+.icon-btn:focus-visible,
+.p-btn:focus-visible,
+.p-speed:focus-visible,
+.seg button:focus-visible,
+.dd-btn:focus-visible,
+.dd-item:focus-visible,
+.faq-item summary:focus-visible,
+.faq-sub summary:focus-visible,
+.toast-close:focus-visible,
+.toast-btn:focus-visible,
+.preset-chip:focus-visible,
+.xm-item:focus-visible,
+a:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.switch input:focus-visible + .track{outline:2px solid var(--primary);outline-offset:2px}
+input:focus-visible,textarea:focus-visible{outline:none}
+
+/* ===== B · REGIONE SOLO SCREEN READER ===== */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
 /* ===== HERO ===== */
 .hero{position:relative;overflow:hidden;border-radius:var(--radius-3xl);background:linear-gradient(135deg,var(--primary-container),var(--secondary-container));color:var(--on-primary-container);padding:var(--space-lg) var(--space-md);margin-bottom:var(--space-md);text-align:center}
 .hero::before,.hero::after{content:"";position:absolute;pointer-events:none;opacity:.65}
