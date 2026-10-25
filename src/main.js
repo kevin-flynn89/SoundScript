@@ -54,7 +54,6 @@ const isIOS = (() => {
   try {
     const ua = navigator.userAgent || "";
     if (/iphone|ipad|ipod/i.test(ua)) return true;
-    /* iPad su iOS 13+ si presenta come MacIntel con touch */
     if (navigator.platform === "MacIntel" && (navigator.maxTouchPoints || 0) > 1) return true;
   } catch (e) {}
   return false;
@@ -98,7 +97,6 @@ function renderToast(html, sticky) {
   if (!sticky) toastTimer = setTimeout(hideToast, 3000);
 }
 
-/* Toast informativo: versione aggiornata in background (soluzione A). */
 function showUpdatedToast() {
   const t = $("#toast");
   if (!t) return;
@@ -136,7 +134,6 @@ function showStatusToast(type) {
     `, false);
   }
 }
-/* Forza l'attivazione del SW in attesa (pulsante "Controlla"). */
 function forceSwActivation() {
   if (swReg && swReg.waiting) {
     swReg.waiting.postMessage({ type: "SKIP_WAITING" });
@@ -160,8 +157,6 @@ async function checkForUpdates() {
     if (!("serviceWorker" in navigator) || !swReg) throw new Error("sw-non-disponibile");
     await swReg.update();
     await sleep(1200);
-    /* Con skipWaiting automatico, al momento del click il SW nuovo è
-       già attivato: mostriamo il toast di conferma "App aggiornata". */
     showStatusToast("success");
   } catch (err) {
     showStatusToast("warning");
@@ -176,8 +171,6 @@ function setupSwUpdates(reg) {
     const nw = reg.installing;
     if (!nw) return;
     nw.addEventListener("statechange", () => {
-      /* Con skipWaiting() il SW si attiva da solo: al controllerchange
-         mostreremo il toast leggero "Aggiornato alla build X". */
       if (nw.state === "installed" && navigator.serviceWorker.controller) {
         nw.postMessage({ type: "SKIP_WAITING" });
       }
@@ -189,7 +182,6 @@ function setupSwUpdates(reg) {
 }
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    /* Soluzione A: toast informativo invece del bloccante. */
     showUpdatedToast();
   });
   window.addEventListener("load", async () => {
@@ -636,8 +628,10 @@ const DROP_MARK_SVG = `<svg class="drop-mark" viewBox="0 0 80 64" aria-hidden="t
   <circle cx="72" cy="56" r="4.5" fill="#06b6d4"/>
 </svg>`;
 
+/* Cheveron grande (sezioni principali) */
 const CHEVRON_SVG = `<svg class="chev" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>`;
-const CHEV_SVG = `<svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>`;
+/* Chevron piccolo (FAQ annidate) — stesso path, solo dimensioni ridotte */
+const CHEV_SVG = `<svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>`;
 const TICK_SVG = `<svg class="tick" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M378-246 154-470l43-43 181 181 384-384 43 43-427 427Z"/></svg>`;
 
 /* ===== Menu a tendina custom ===== */
@@ -1084,7 +1078,7 @@ function render() {
           </div>
         </details>
 
-        <!-- NUOVA SEZIONE: Domande frequenti (con domanda iOS condizionale) -->
+        <!-- SEZIONE: Domande frequenti -->
         <details class="faq-item t5" id="faqFaq">
           <summary>
             <span class="si" aria-hidden="true">${FAQ_SVG}</span>

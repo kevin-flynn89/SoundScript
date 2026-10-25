@@ -25,7 +25,6 @@
 --shadow3:0 4px 12px 3px rgba(0,0,0,.12),0 1px 3px rgba(0,0,0,.15);
 }
 
-/* Dark: sistema in dark SENZA override chiaro, oppure override manuale scuro */
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
 --primary:#818cf8;--primary-hover:#a5b4fc;--on-primary:#1e1b4b;
 --primary-container:#3730a3;--on-primary-container:#e0e7ff;
@@ -63,7 +62,6 @@ main{max-width:760px;margin:0 auto;padding:var(--space-md) var(--space-md) 120px
 .hidden{display:none!important}
 .muted{color:var(--on-surface-variant);font-size:.875rem}
 
-/* ===== TOUCH: niente flash rettangolare sui tap ===== */
 button,a,summary,input,textarea,select,[role="button"]{-webkit-tap-highlight-color:transparent}
 button{-webkit-appearance:none;appearance:none;touch-action:manipulation}
 
@@ -77,7 +75,6 @@ button{-webkit-appearance:none;appearance:none;touch-action:manipulation}
 h1{font:800 clamp(2rem,6vw,2.5rem)/1 "Roboto Flex",system-ui,sans-serif;font-variation-settings:"wdth" 118,"opsz" 48;letter-spacing:-.02em;margin:0 0 var(--space-xs)}
 .sub{margin:0 auto;font-size:1rem;line-height:1.5;color:color-mix(in srgb,var(--on-primary-container) 85%,transparent);max-width:560px}
 
-/* ===== LOGO NELL'HERO ===== */
 .hero-logo{max-width:320px;width:100%;height:auto;display:block;margin:0 auto var(--space-sm)}
 .hero-logo-light{display:block}
 .hero-logo-dark{display:none}
@@ -90,13 +87,11 @@ h1{font:800 clamp(2rem,6vw,2.5rem)/1 "Roboto Flex",system-ui,sans-serif;font-var
 :root[data-theme="light"] .hero-logo-light{display:block}
 :root[data-theme="light"] .hero-logo-dark{display:none}
 
-/* ===== CARDS ===== */
 .card{background:var(--sc-low);border-radius:var(--radius-2xl);padding:var(--space-md);margin-top:var(--space-lg);box-shadow:var(--shadow1)}
 .card-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-sm);margin-bottom:var(--space-md)}
 .card-head .card-label{margin:0}
 .card-label{font:500 .75rem/1.2 "Roboto Flex",system-ui,sans-serif;letter-spacing:.04em;text-transform:uppercase;color:var(--on-surface-variant);margin:0 0 var(--space-md)}
 
-/* ===== FEATURES ===== */
 .feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:var(--space-md)}
 .feature-item{display:flex;gap:var(--space-sm);align-items:flex-start}
 .feature-icon{width:40px;height:40px;border-radius:var(--radius-md);background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary);display:grid;place-items:center;flex:none}
@@ -104,7 +99,6 @@ h1{font:800 clamp(2rem,6vw,2.5rem)/1 "Roboto Flex",system-ui,sans-serif;font-var
 .feature-item h3{font:600 1rem/1.3 "Roboto Flex",system-ui,sans-serif;margin:0 0 4px}
 .feature-item p{margin:0;font-size:.875rem;color:var(--on-surface-variant);line-height:1.5}
 
-/* ===== DROP ZONE ===== */
 .drop{position:relative;display:block;border:2px dashed var(--outline);border-radius:var(--radius-2xl);padding:var(--space-lg) var(--space-md);text-align:center;background:var(--sc-high);cursor:pointer;transition:all .4s var(--ease);margin-top:var(--space-lg)}
 .drop:hover,.drop.over{border-color:var(--primary);background:var(--sc-highest);border-radius:56px 32px 56px 32px}
 .drop-mark{width:88px;height:64px;display:block;margin:0 auto var(--space-sm);color:var(--on-surface);transition:transform .6s var(--ease)}
@@ -112,14 +106,12 @@ h1{font:800 clamp(2rem,6vw,2.5rem)/1 "Roboto Flex",system-ui,sans-serif;font-var
 .drop strong{display:block;font:700 1.25rem/1.3 "Roboto Flex",system-ui,sans-serif;font-variation-settings:"wdth" 108,"opsz" 28;margin-bottom:6px}
 .drop span{display:block;color:var(--on-surface-variant);font-size:.9375rem}
 
-/* ===== CHIPS ===== */
 .chips{display:flex;flex-wrap:wrap;gap:var(--space-xs)}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:color-mix(in srgb,var(--primary) 10%,transparent);border-radius:999px;font-size:.8125rem;font-weight:600;color:var(--primary);max-width:100%;flex-wrap:wrap}
 .chip b{font-weight:700}
 .chip.warn{background:var(--warning-container);color:var(--on-warning-container)}
 .chip.ok{background:var(--success-container);color:var(--on-success-container)}
 
-/* ===== TEXTAREA ===== */
 textarea{width:100%;min-height:140px;padding:var(--space-sm);border:1px solid var(--outline);border-radius:var(--radius-md);background:var(--sc-lowest);color:var(--on-surface);font:inherit;resize:vertical;transition:border-color .2s,box-shadow .2s;margin-top:var(--space-md)}
 textarea:hover{border-color:var(--on-surface-variant)}
 textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 18%,transparent)}
@@ -139,7 +131,6 @@ textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px col
 .p-knob{position:absolute;top:50%;left:0%;width:14px;height:14px;border-radius:50%;background:var(--sc-lowest);border:2px solid var(--primary);transform:translate(-50%,-50%);box-shadow:0 1px 4px rgba(0,0,0,.25);transition:width .15s,height .15s}
 .p-seek:hover .p-knob,.p-seek.drag .p-knob{width:18px;height:18px}
 
-/* ===== BUTTONS ===== */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-xs);min-height:44px;padding:0 var(--space-md);font:600 .875rem/1 "Roboto Flex",system-ui,sans-serif;letter-spacing:.01em;background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary);border:0;border-radius:999px;cursor:pointer;transition:background-color .2s,transform .15s var(--ease);white-space:nowrap;max-width:100%}
 .btn:hover{background:color-mix(in srgb,var(--primary) 20%,transparent)}
 .btn:active{transform:scale(.97)}
@@ -152,25 +143,21 @@ textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px col
 .btn.danger:hover{background:color-mix(in srgb,var(--danger) 20%,transparent)}
 .actions{display:flex;flex-wrap:wrap;gap:var(--space-sm);margin-top:var(--space-md)}
 
-/* ===== SEGMENTED ===== */
 .seg{display:flex;gap:var(--space-xs);flex-wrap:wrap;margin:var(--space-sm) 0 var(--space-md);background:var(--sc-lowest);padding:4px;border-radius:var(--radius-lg);border:1px solid var(--outline-variant);width:100%;max-width:100%}
 .seg button{flex:1 1 auto;padding:9px 16px;border-radius:var(--radius-md);border:0;background:transparent;color:var(--on-surface-variant);font:600 .8125rem/1 "Roboto Flex",system-ui,sans-serif;cursor:pointer;transition:all .25s var(--ease);text-align:center;min-width:0}
 .seg button:hover{color:var(--on-surface)}
 .seg button.active{background:var(--primary);color:var(--on-primary);box-shadow:0 1px 3px rgba(79,70,229,.25)}
 
-/* ===== INPUT ===== */
 input[type="text"],input[type="password"],select{width:100%;max-width:100%;padding:13px 16px;border:1px solid var(--outline);border-radius:var(--radius-md);background:var(--sc-lowest);color:var(--on-surface);font:inherit;transition:border-color .2s,box-shadow .2s}
 input:focus,select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 18%,transparent)}
 input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transparent)}
 
-/* ===== TEST CHIAVE ===== */
 .test-row{display:flex;gap:var(--space-xs);align-items:center;margin-top:var(--space-sm)}
 .test-row input{flex:1;margin-top:0}
 .test-result{margin-top:var(--space-xs);font-size:.8125rem;font-weight:600;min-height:1.2em}
 .test-result.ok{color:var(--success)}
 .test-result.err{color:var(--danger)}
 
-/* ===== SWITCH ===== */
 .switch{position:relative;width:46px;height:26px;flex:none}
 .switch input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer;z-index:1}
 .switch .track{position:absolute;inset:0;border-radius:999px;background:var(--sc-high);transition:background .2s}
@@ -178,7 +165,6 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
 .switch input:checked + .track{background:var(--primary)}
 .switch input:checked + .track::after{transform:translateX(20px)}
 
-/* ===== BADGE DI STATO ===== */
 .hbadge{display:inline-flex;align-items:center;gap:7px;padding:6px 13px;border-radius:999px;font-size:.75rem;font-weight:700;white-space:nowrap}
 .hbadge .dot{width:8px;height:8px;border-radius:50%;flex:none}
 .hbadge.ok{background:var(--success-container);color:var(--on-success-container)}
@@ -189,7 +175,6 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
 .hbadge.warn .dot{background:var(--warning)}
 .hbadge-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 
-/* ===== DROPDOWN ===== */
 .dd{position:relative;z-index:1;min-width:0}
 .dd.open{z-index:80}
 .dd-btn{position:relative;width:100%;display:flex;align-items:center;padding:13px 16px;border:1px solid var(--outline);border-radius:var(--radius-md);background:var(--sc-lowest);font:inherit;color:var(--on-surface);cursor:pointer;transition:all .2s}
@@ -208,7 +193,6 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
 .dd-item.sel{background:color-mix(in srgb,var(--primary) 12%,transparent);font-weight:600}
 .dd-item.sel .tick{visibility:visible}
 
-/* ===== RIGA PORTALE CHIAVI ===== */
 .key-portal{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:var(--space-sm) 0 0;font-size:.875rem;line-height:1.5;color:var(--on-surface-variant)}
 .key-portal .kp-ico{flex:none;font-size:15px;transform:translateY(1px)}
 .key-portal a{color:var(--primary);font-weight:600;text-decoration:underline;text-underline-offset:3px;word-break:break-word}
@@ -216,7 +200,6 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
 .key-portal .kp-ext{font-size:.85em;margin-left:2px;opacity:.8}
 .key-portal .kp-note{flex-basis:100%;font-size:.8125rem;color:var(--warning);margin-top:4px;line-height:1.4}
 
-/* ===== STATUS ===== */
 .status-row{display:flex;align-items:center;gap:var(--space-sm);margin:var(--space-lg) 0 var(--space-sm)}
 .status{font-weight:500;font-size:.9375rem;min-width:0;overflow-wrap:anywhere;flex:1}
 .progress{height:8px;background:var(--sc);border-radius:999px;overflow:hidden}
@@ -224,7 +207,6 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
 .spinner{width:18px;height:18px;border:2.5px solid var(--outline);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite;flex:none}
 .mini-spinner{width:14px;height:14px;border:2px solid color-mix(in srgb,var(--primary) 30%,transparent);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite;display:inline-block;vertical-align:middle}
 
-/* ===== TL;DR ===== */
 .tldr-box{padding:var(--space-sm) var(--space-md);background:var(--sc);border-radius:var(--radius-md);margin-top:var(--space-sm);line-height:1.6;border-left:3px solid var(--primary);white-space:pre-wrap;overflow-wrap:anywhere}
 .tldr-box.loading{opacity:.55;animation:pulseTldr 1s ease-in-out infinite}
 @keyframes pulseTldr{0%,100%{opacity:.55}50%{opacity:.85}}
@@ -244,19 +226,20 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
 .faq-item summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:14px;padding:18px 22px;font:600 1.05rem/1.3 "Roboto Flex",system-ui,sans-serif;font-variation-settings:"wdth" 104,"opsz" 20;user-select:none;-webkit-tap-highlight-color:transparent}
 .faq-item summary::-webkit-details-marker{display:none}
 .faq-item summary .ttl{flex:1 1 auto;min-width:0}
-.faq-item summary .chev{flex:none;color:var(--on-surface);transition:transform .35s var(--ease)}
+.faq-item summary .chev{flex:none;color:var(--on-surface);transform:rotate(0deg);transition:transform .35s var(--ease)}
 .faq-item[open] summary .chev{transform:rotate(180deg)}
 .faq-body{padding:0 22px 22px;animation:dropin .35s var(--ease2) both}
 
-/* Domande FAQ annidate (FAQ dentro FAQ) */
+/* FAQ annidate: comportamento chevron garantito */
 .faq-nested{background:transparent;box-shadow:none;margin:6px 0}
 .faq-nested summary{padding:12px 16px;font-size:.9375rem;gap:10px}
+.faq-nested summary .chev{flex:none;color:var(--on-surface-variant);transform:rotate(0deg);transition:transform .35s var(--ease)}
+.faq-nested[open] summary .chev{transform:rotate(180deg)}
 .faq-nested .faq-body{padding:0 16px 16px;font-size:.875rem}
 .faq-nested .faq-body ol{padding-left:var(--space-md);margin:var(--space-xs) 0;display:grid;gap:4px}
 .faq-nested .faq-body p + p{margin-top:var(--space-xs)}
 .faq-nested .faq-body b{color:var(--on-surface)}
 
-/* ===== ICONE ORGANICHE ===== */
 .si{width:40px;height:40px;position:relative;display:grid;place-items:center;flex:none;color:var(--on-primary-container)}
 .si::before{content:"";position:absolute;inset:0;background:var(--primary-container);-webkit-mask:center/100% 100% no-repeat;mask:center/100% 100% no-repeat;transition:transform .6s var(--ease)}
 .si>*{position:relative;z-index:1}
@@ -275,7 +258,6 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
 .t5 .si::before{-webkit-mask-image:var(--s-clover);mask-image:var(--s-clover);background:var(--primary-container)}
 .t5 .si{color:var(--on-primary-container)}
 
-/* ===== CRONOLOGIA ===== */
 .search-wrap{position:relative;margin-bottom:var(--space-sm)}
 .search-wrap svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--on-surface-variant);pointer-events:none}
 input.search-input{width:100%;padding:12px 16px 12px 44px;border:1px solid var(--outline);border-radius:999px;background:var(--sc-lowest);color:var(--on-surface);font:inherit;font-size:.9375rem;transition:border-color .2s,box-shadow .2s}
@@ -301,13 +283,11 @@ input.search-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0
 .hist-footer{display:flex;gap:var(--space-xs);flex-wrap:wrap;margin-top:var(--space-sm);align-items:center}
 .hist-count{margin-left:auto;font-size:.75rem;color:var(--on-surface-variant)}
 
-/* ===== IMPOSTAZIONI ===== */
 .settings-item{display:flex;align-items:center;justify-content:space-between;gap:var(--space-md);padding:var(--space-sm) 0;border-bottom:1px solid var(--outline-variant)}
 .settings-item:last-of-type{border-bottom:0}
 .settings-item-title{font-weight:600;font-size:.9375rem;margin-bottom:2px}
 .settings-item-desc{font-size:.8125rem;color:var(--on-surface-variant)}
 
-/* ===== TOAST ===== */
 .toast{position:fixed;left:50%;bottom:calc(var(--space-lg) + env(safe-area-inset-bottom,0px));transform:translate(-50%,140%);opacity:0;z-index:1100;width:min(480px,calc(100vw - 24px));background:var(--sc-lowest);border:1px solid var(--outline-variant);border-radius:var(--radius-xl);box-shadow:var(--shadow3);padding:var(--space-sm) var(--space-md) var(--space-md);transition:transform .45s var(--ease),opacity .3s}
 .toast.show{transform:translate(-50%,0);opacity:1}
 .toast.update{background:color-mix(in srgb,var(--primary) 6%,var(--sc-lowest));border-color:color-mix(in srgb,var(--primary) 35%,var(--outline-variant))}
@@ -330,17 +310,14 @@ input.search-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0
 .toast-btn.ghost{background:color-mix(in srgb,var(--on-surface) 8%,transparent);color:var(--on-surface)}
 .toast-btn.ghost:hover{background:color-mix(in srgb,var(--on-surface) 14%,transparent)}
 
-/* ===== WAKE LOCK BANNER ===== */
 .wl-banner{display:flex;align-items:center;gap:10px;margin-top:var(--space-md);padding:var(--space-sm) var(--space-md);border-radius:var(--radius-md);font-size:.875rem;font-weight:600}
 .wl-banner.ok{background:color-mix(in srgb,var(--success) 12%,transparent);border:1.5px solid color-mix(in srgb,var(--success) 35%,transparent);color:var(--on-success-container)}
 .wl-banner.warn{background:color-mix(in srgb,var(--warning) 12%,transparent);border:1.5px solid color-mix(in srgb,var(--warning) 35%,transparent);color:var(--on-warning-container)}
 
-/* ===== DISCLAIMER ===== */
 .disclaimer{margin-top:var(--space-md);padding:var(--space-sm) var(--space-md);border-radius:var(--radius-md);background:color-mix(in srgb,var(--secondary) 10%,transparent);border:1.5px solid color-mix(in srgb,var(--secondary) 30%,transparent);font-size:.875rem;line-height:1.6;display:flex;gap:12px;align-items:flex-start}
 .disclaimer .ic{font-size:20px;flex:none}
 .disclaimer b{color:var(--primary)}
 
-/* ===== DOWNLOAD AREA ===== */
 .dl-area{margin-top:var(--space-md);border:1.5px solid var(--outline-variant);border-radius:var(--radius-md);padding:var(--space-md);background:var(--sc-lowest)}
 .dl-head{display:flex;align-items:center;gap:10px;margin-bottom:var(--space-sm);flex-wrap:wrap}
 .dl-step{font-weight:700;font-size:.9375rem;min-width:0}
@@ -359,7 +336,6 @@ input.search-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0
 .dl-file-row.run .dot{background:var(--primary)}
 .dl-file-row.wait .dot{background:var(--outline-variant)}
 
-/* ===== CHAIN LIST ===== */
 .chain-list{list-style:none;margin-top:var(--space-md)}
 .chain-item{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-sm);padding:var(--space-sm) var(--space-md);background:var(--sc-lowest);border:1px solid var(--outline-variant);border-radius:var(--radius-md);margin-bottom:var(--space-xs);cursor:grab;transition:all .2s;user-select:none}
 .chain-item:hover{border-color:var(--outline);background:var(--sc-low)}
@@ -369,13 +345,11 @@ input.search-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0
 .chain-item .chain-label{flex:1 1 auto;min-width:0;font-weight:500;font-size:.875rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chain-item .rank{font-size:.75rem;font-weight:600;color:var(--primary);background:color-mix(in srgb,var(--primary) 12%,transparent);padding:4px 10px;border-radius:999px;flex:none}
 
-/* ===== DETAILS CHIAVE ===== */
 .details{width:100%;min-width:0;display:none;gap:var(--space-sm);margin-top:var(--space-sm);flex-direction:column}
 .details.open{display:flex}
 .lasterr{font-size:.8125rem;color:var(--on-surface-variant);background:var(--sc);border-radius:var(--radius-md);padding:var(--space-xs) var(--space-sm);overflow-wrap:anywhere}
 .kmsg{font-size:.8125rem;color:var(--on-surface-variant);margin:var(--space-xs) 0;overflow-wrap:anywhere}
 
-/* ===== RESPONSIVE: SCHERMI PICCOLI ===== */
 @media (max-width:520px){
   main{padding:var(--space-sm) var(--space-sm) 120px}
   .hero{padding:var(--space-md) var(--space-sm);border-radius:var(--radius-2xl)}
@@ -412,7 +386,6 @@ input.search-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0
   .toast.show{transform:translateX(0) translateY(0)}
 }
 
-/* ===== RESPONSIVE: ORIZZONTALE ===== */
 @media (orientation:landscape) and (max-height:520px){
   main{padding:var(--space-sm) var(--space-md) var(--space-lg)}
   .hero{padding:var(--space-sm) var(--space-md);margin-bottom:var(--space-sm)}
@@ -423,7 +396,6 @@ input.search-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0
   .feature-grid{grid-template-columns:repeat(3,1fr)}
 }
 
-/* ===== DESKTOP: SEGMENTED COMPATTI ===== */
 @media (min-width:521px){
   .seg{width:fit-content;max-width:100%}
   .seg button{flex:0 1 auto}
