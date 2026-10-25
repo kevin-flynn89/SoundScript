@@ -49,6 +49,17 @@ function throwAbort() {
   throw e;
 }
 
+/* ===== Rilevamento iOS ===== */
+const isIOS = (() => {
+  try {
+    const ua = navigator.userAgent || "";
+    if (/iphone|ipad|ipod/i.test(ua)) return true;
+    /* iPad su iOS 13+ si presenta come MacIntel con touch */
+    if (navigator.platform === "MacIntel" && (navigator.maxTouchPoints || 0) > 1) return true;
+  } catch (e) {}
+  return false;
+})();
+
 /* ===== Mappa portali chiavi API ===== */
 const KEY_PORTALS = {
   openai:    { name: "OpenAI",         url: "https://platform.openai.com/api-keys" },
@@ -61,7 +72,6 @@ const KEY_PORTALS = {
 
 /* ===== Service worker & aggiornamenti ===== */
 let swReg = null;
-let swApplyRequested = false;
 let toastTimer = null;
 
 const TOAST_ICONS = {
@@ -87,22 +97,20 @@ function renderToast(html, sticky) {
   t.classList.add("show");
   if (!sticky) toastTimer = setTimeout(hideToast, 3000);
 }
-function showUpdateToast() {
+
+/* Toast informativo: versione aggiornata in background (soluzione A). */
+function showUpdatedToast() {
   const t = $("#toast");
   if (!t) return;
-  t.className = "toast update";
+  t.className = "toast";
   renderToast(`
     <div class="toast-head">
-      <div class="toast-ico update">${TOAST_ICONS.update}</div>
-      <div class="toast-title">È disponibile una nuova versione</div>
+      <div class="toast-ico success">${TOAST_ICONS.success}</div>
+      <div class="toast-title">Aggiornato alla ${APP_VERSION}</div>
       <button class="toast-close" data-toast-close aria-label="Chiudi">${TOAST_ICONS.close}</button>
     </div>
-    <div class="toast-desc">Aggiorna ora per avere le ultime funzionalità e correzioni.</div>
-    <div class="toast-actions">
-      <button class="toast-btn primary" data-toast-update>Aggiorna ora</button>
-      <button class="toast-btn ghost" data-toast-close>Più tardi</button>
-    </div>
-  `, true);
+    <div class="toast-desc">Nuova versione attivata in background. Ricarica la pagina se vedi comportamenti strani.</div>
+  `, false);
 }
 function showStatusToast(type) {
   const t = $("#toast");
@@ -128,9 +136,9 @@ function showStatusToast(type) {
     `, false);
   }
 }
-function applySwUpdate() {
+/* Forza l'attivazione del SW in attesa (pulsante "Controlla"). */
+function forceSwActivation() {
   if (swReg && swReg.waiting) {
-    swApplyRequested = true;
     swReg.waiting.postMessage({ type: "SKIP_WAITING" });
     const t = $("#toast");
     if (t) t.className = "toast";
@@ -141,8 +149,6 @@ function applySwUpdate() {
       </div>
       <div class="toast-desc">L'app si sta ricaricando con la nuova versione.</div>
     `, false);
-  } else {
-    hideToast();
   }
 }
 async function checkForUpdates() {
@@ -154,8 +160,9 @@ async function checkForUpdates() {
     if (!("serviceWorker" in navigator) || !swReg) throw new Error("sw-non-disponibile");
     await swReg.update();
     await sleep(1200);
-    if (swReg.waiting && navigator.serviceWorker.controller) showUpdateToast();
-    else showStatusToast("success");
+    /* Con skipWaiting automatico, al momento del click il SW nuovo è
+       già attivato: mostriamo il toast di conferma "App aggiornata". */
+    showStatusToast("success");
   } catch (err) {
     showStatusToast("warning");
   } finally {
@@ -169,14 +176,21 @@ function setupSwUpdates(reg) {
     const nw = reg.installing;
     if (!nw) return;
     nw.addEventListener("statechange", () => {
-      if (nw.state === "installed" && navigator.serviceWorker.controller) showUpdateToast();
+      /* Con skipWaiting() il SW si attiva da solo: al controllerchange
+         mostreremo il toast leggero "Aggiornato alla build X". */
+      if (nw.state === "installed" && navigator.serviceWorker.controller) {
+        nw.postMessage({ type: "SKIP_WAITING" });
+      }
     });
   });
-  if (reg.waiting && navigator.serviceWorker.controller) showUpdateToast();
+  if (reg.waiting && navigator.serviceWorker.controller) {
+    reg.waiting.postMessage({ type: "SKIP_WAITING" });
+  }
 }
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (swApplyRequested) window.location.reload();
+    /* Soluzione A: toast informativo invece del bloccante. */
+    showUpdatedToast();
   });
   window.addEventListener("load", async () => {
     try {
@@ -612,6 +626,7 @@ const HIST_SVG = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path 
 const KEY_SVG = `<svg viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="3.5"/><path d="M10 13 19 4"/><path d="M17 6l2 2"/><path d="M14 9l1.5 1.5"/></svg>`;
 const CHIP_SVG = `<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><rect x="10.5" y="10.5" width="3" height="3"/><path d="M10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M2 14h3M19 10h3M19 14h3"/></svg>`;
 const REFRESH_SVG = `<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>`;
+const FAQ_SVG = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .2c0 1.8-2.5 2-2.5 3.3"/><circle cx="12" cy="17" r=".5" fill="currentColor" stroke="none"/></svg>`;
 const DROP_MARK_SVG = `<svg class="drop-mark" viewBox="0 0 80 64" aria-hidden="true">
   <defs><linearGradient id="dz-mark" x1="0" y1="0" x2="1" y2="1">
     <stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#06b6d4"/>
@@ -1069,6 +1084,53 @@ function render() {
           </div>
         </details>
 
+        <!-- NUOVA SEZIONE: Domande frequenti (con domanda iOS condizionale) -->
+        <details class="faq-item t5" id="faqFaq">
+          <summary>
+            <span class="si" aria-hidden="true">${FAQ_SVG}</span>
+            <span class="ttl">Domande frequenti</span>
+            ${CHEVRON_SVG}
+          </summary>
+          <div class="faq-body" style="padding-top:0">
+            ${isIOS ? `
+            <details class="faq-item t5 faq-nested" open>
+              <summary>
+                <span class="ttl">Perché su iPhone non posso condividere audio da WhatsApp?</span>
+                ${CHEV_SVG}
+              </summary>
+              <div class="faq-body">
+                <p>È un limite di iOS: il sistema non consente alle app web installate di comparire nel menu Condividi di WhatsApp (su Android e desktop invece funziona).</p>
+                <p style="margin-top:var(--space-xs)"><b>Percorso alternativo su iPhone/iPad:</b></p>
+                <ol>
+                  <li>In WhatsApp, tieni premuto il vocale → <b>Inoltra/Condividi</b> → <b>Salva su File</b></li>
+                  <li>Apri SoundScript e tocca <b>"Scegli audio"</b></li>
+                  <li>Seleziona il file appena salvato dall'app <b>File</b></li>
+                </ol>
+                <p style="margin-top:var(--space-xs)">Il risultato è identico: trascrizione, TL;DR e player funzionano come al solito.</p>
+              </div>
+            </details>
+            ` : ""}
+            <details class="faq-item t5 faq-nested">
+              <summary>
+                <span class="ttl">Dove vengono salvati i miei audio e le trascrizioni?</span>
+                ${CHEV_SVG}
+              </summary>
+              <div class="faq-body">
+                <p>Gli audio <b>non</b> vengono conservati: restano in memoria solo per la sessione corrente (player). Le trascrizioni e i TL;DR vivono nella cronologia locale del dispositivo, mai su server.</p>
+              </div>
+            </details>
+            <details class="faq-item t5 faq-nested">
+              <summary>
+                <span class="ttl">Perché i vocali brevi non ricevono il TL;DR automatico?</span>
+                ${CHEV_SVG}
+              </summary>
+              <div class="faq-body">
+                <p>Sotto i 60 secondi il riepilogo suele essere superfluo: lo generi tu con <b>"Genera TL;DR"</b> se ti serve. Sopra il minuto parte da solo.</p>
+              </div>
+            </details>
+          </div>
+        </details>
+
         <details class="faq-item t3" id="faqInfo">
           <summary>
             <span class="si" aria-hidden="true">${REFRESH_SVG}</span>
@@ -1107,7 +1169,7 @@ function render() {
             <div class="settings-item">
               <div>
                 <div class="settings-item-title">Aggiornamenti</div>
-                <div class="settings-item-desc">Verifica manuale se esiste una nuova versione</div>
+                <div class="settings-item-desc">Le nuove versioni si attivano in automatico. Qui puoi verificare manualmente</div>
               </div>
               <button class="btn" id="checkUpdateBtn"><span id="checkUpdateLabel">Controlla</span></button>
             </div>
@@ -1117,10 +1179,6 @@ function render() {
                 <div class="settings-item-desc" id="appVersion">—</div>
               </div>
             </div>
-            <p class="muted" style="margin-top:var(--space-sm)">
-              Quando esce una nuova versione compare un toast in basso: "Aggiorna ora" la applica subito,
-              "Più tardi" la rimanda alla prossima apertura.
-            </p>
           </div>
         </details>
       </div>
@@ -1134,7 +1192,6 @@ function render() {
   if (toastEl) {
     toastEl.addEventListener("click", (e) => {
       if (e.target.closest("[data-toast-close]")) { hideToast(); return; }
-      if (e.target.closest("[data-toast-update]")) { applySwUpdate(); return; }
     });
   }
 
@@ -1818,7 +1875,7 @@ async function callWithRetry(entry, slot, pct, makeCall) {
         else clearLastError(entry.id);
         return out;
       } catch (err) {
-        if (err && err.name === "AbortError") throw err; /* annullamento: niente retry */
+        if (err && err.name === "AbortError") throw err;
         saveLastError(entry.id, describeError(err));
         const st = err && err.status;
         if (st === 401 || st === 403 || st === 402) throw err;
@@ -1910,7 +1967,7 @@ async function process(file) {
       try {
         if (entry.id === "local") {
           transcript = await localTranscribe(file, audio);
-          if (signal.aborted) throwAbort(); /* i modelli locali non si interrompono: si scarta il risultato */
+          if (signal.aborted) throwAbort();
           sttEngine = "locale";
         } else {
           stat("Trascrizione con " + entryLabel(entry) + "…", 30);
