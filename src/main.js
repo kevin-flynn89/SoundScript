@@ -35,6 +35,7 @@ const dlRows = {};
 /* ===== Cronologia ===== */
 let lastSttEngine = "";
 let lastDurSec = null;
+let lastProcessDate = new Date();
 let histShowAll = false;
 const HIST_LIMIT = 5;
 
@@ -62,6 +63,19 @@ const KEY_PORTALS = {
   mistral:   { name: "Mistral",        url: "https://console.mistral.ai/api-keys/" },
   custom:    null
 };
+
+/* ===== Logo per il foglio di stampa (identico all'hero, versione carta) ===== */
+const PRINT_LOGO_SVG =
+  '<svg class="pv-logo" viewBox="0 0 320 80" role="img" aria-label="SoundScript">' +
+  '<defs><linearGradient id="pvlg" x1="0" y1="0" x2="1" y2="1">' +
+  '<stop offset="0" stop-color="#4f46e5"/><stop offset="1" stop-color="#06b6d4"/>' +
+  '</linearGradient></defs>' +
+  '<g transform="translate(8,8)">' +
+  '<path d="M8 32 Q16 8 24 32 T40 32" fill="none" stroke="url(#pvlg)" stroke-width="6" stroke-linecap="round"/>' +
+  '<path d="M48 22 H72 M48 32 H66 M48 42 H58" fill="none" stroke="#4f46e5" stroke-width="5" stroke-linecap="round"/>' +
+  '<circle cx="72" cy="42" r="4" fill="#06b6d4"/></g>' +
+  '<text x="96" y="52" font-family="Roboto Flex, system-ui, sans-serif" font-weight="700" font-size="28" fill="#0f172a" letter-spacing="-0.02em">Sound <tspan fill="#4f46e5">Script</tspan></text>' +
+  '</svg>';
 
 /* ===== Service worker: aggiornamento silenzioso ===== */
 let swReg = null;
@@ -156,7 +170,6 @@ async function checkForUpdates() {
 }
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    /* Un nuovo SW ha preso il controllo durante la sessione: avviso leggero, mai bloccante */
     if (swHadController && !swCheckInProgress) {
       showInfoToast("Nuova versione installata", "Sarà attiva dal prossimo avvio dell'app.");
     }
@@ -479,6 +492,79 @@ function resetSession() {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+/* ===== Export TXT / MD / PDF ===== */
+function fileStamp() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes());
+}
+function docDateLabel() {
+  try {
+    return lastProcessDate.toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+  } catch (e) { return String(lastProcessDate); }
+}
+function currentSum() {
+  return hasSummary ? (($("#sum") && $("#sum").textContent) || "") : "";
+}
+function buildTXT() {
+  const sum = currentSum();
+  let s = "SoundScript — " + docDateLabel() + "\n";
+  s += "Motore: " + (lastSttEngine || "—") + " | Durata: " + (lastDurSec != null ? fmtDur(lastDurSec) : "n/d") + "\n\n";
+  s += "TRASCRIZIONE\n" + (($("#txt") && $("#txt").value) || "") + "\n";
+  if (sum) s += "\nTL;DR\n" + sum + "\n";
+  return s;
+}
+function buildMD() {
+  const sum = currentSum();
+  let s = "# SoundScript — Trascrizione vocale\n\n";
+  s += "- **Data:** " + docDateLabel() + "\n";
+  s += "- **Motore:** " + (lastSttEngine || "—") + "\n";
+  s += "- **Durata:** " + (lastDurSec != null ? fmtDur(lastDurSec) : "n/d") + "\n\n";
+  s += "## Trascrizione\n\n" + (($("#txt") && $("#txt").value) || "") + "\n";
+  if (sum) s += "\n## TL;DR\n\n" + sum + "\n";
+  return s;
+}
+function buildDocHTML() {
+  const sum = currentSum();
+  let h = "";
+  h += '<div class="pv-head">' + PRINT_LOGO_SVG + '<span class="pv-kind">Trascrizione vocale</span></div>';
+  h += '<div class="pv-meta"><span>Data: ' + docDateLabel() + '</span><span>Motore: ' + (lastSttEngine || "—") + '</span><span>Durata: ' + (lastDurSec != null ? fmtDur(lastDurSec) : "n/d") + '</span></div>';
+  h += "<h2>Trascrizione</h2><p></p>";
+  if (sum) h += "<h2>TL;DR</h2><p></p>";
+  h += '<div class="pv-foot"><span>Generato con SoundScript</span><span>soundscript · ' + fileStamp() + '</span></div>';
+  const wrap = document.createElement("div");
+  wrap.innerHTML = h;
+  const ps = wrap.querySelectorAll("p");
+  if (ps[0]) ps[0].textContent = ($("#txt") && $("#txt").value) || "";
+  if (sum && ps[1]) ps[1].textContent = sum;
+  return wrap.innerHTML;
+}
+function downloadFile(name, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function ensurePrintView() {
+  let pv = document.getElementById("printView");
+  if (!pv) {
+    pv = document.createElement("div");
+    pv.id = "printView";
+    document.body.appendChild(pv);
+  }
+  return pv;
+}
+function closeExportMenu() {
+  const m = $("#exportMenu");
+  if (m) m.hidden = true;
+  const b = $("#exportBtn");
+  if (b) b.setAttribute("aria-expanded", "false");
+}
+
 /* ===== Ultimi errori ===== */
 function loadLastErrors() {
   try { return JSON.parse(localStorage.getItem(LASTERR_KEY) || "{}"); }
@@ -618,8 +704,10 @@ function closeAllDD() {
     const b = d.querySelector(".dd-btn"); if (b) b.setAttribute("aria-expanded", "false");
   });
 }
-document.addEventListener("click", () => closeAllDD());
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeAllDD(); });
+document.addEventListener("click", () => { closeAllDD(); closeExportMenu(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { closeAllDD(); closeExportMenu(); }
+});
 
 function makeDropdown(host, opts) {
   host.innerHTML = "";
@@ -758,6 +846,8 @@ function loadHistoryEntry(h) {
   $("#resultStt").classList.remove("hidden");
   lastSttEngine = h.engine || "";
   lastDurSec = (h.dur != null && h.dur !== "") ? Number(h.dur) : null;
+  const d = new Date(h.date);
+  lastProcessDate = isNaN(d.getTime()) ? new Date() : d;
   $("#engStt").textContent = (h.engine || "—") + " · dalla cronologia";
   $("#durStt").textContent = lastDurSec != null ? fmtDur(lastDurSec) : "n/d";
   const sum = $("#sum");
@@ -888,6 +978,23 @@ function render() {
         <div class="actions">
           <button id="copy" class="btn">Copia trascrizione</button>
           <button id="share" class="btn">Condividi</button>
+          <div class="export-wrap">
+            <button class="btn" id="exportBtn" aria-haspopup="menu" aria-expanded="false">⤓ Esporta</button>
+            <div class="export-menu" id="exportMenu" hidden role="menu">
+              <button class="xm-item" id="expTxt" role="menuitem">
+                <span class="xm-ico txt">📄</span>
+                <span><span class="xm-t">Testo (.txt)</span><br><span class="xm-d">Solo testo, per appunti rapidi</span></span>
+              </button>
+              <button class="xm-item" id="expMd" role="menuitem">
+                <span class="xm-ico md">Ⓜ️</span>
+                <span><span class="xm-t">Markdown (.md)</span><br><span class="xm-d">Con intestazioni e metadata</span></span>
+              </button>
+              <button class="xm-item" id="expPdf" role="menuitem">
+                <span class="xm-ico pdf">🖨️</span>
+                <span><span class="xm-t">PDF (stampa)</span><br><span class="xm-d">Foglio con logo → "Salva come PDF"</span></span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1193,6 +1300,33 @@ function render() {
   const cb = $("#cancelBtn"); if (cb) cb.onclick = () => { if (abortCtrl) abortCtrl.abort(); };
   const nb = $("#newBtn"); if (nb) nb.onclick = resetSession;
   const tk = $("#testKeyBtn"); if (tk) tk.onclick = testApiKey;
+
+  /* Export wiring */
+  const exBtn = $("#exportBtn");
+  if (exBtn) exBtn.onclick = (e) => {
+    e.stopPropagation();
+    const m = $("#exportMenu");
+    m.hidden = !m.hidden;
+    exBtn.setAttribute("aria-expanded", String(!m.hidden));
+  };
+  const exTxt = $("#expTxt");
+  if (exTxt) exTxt.onclick = () => {
+    closeExportMenu();
+    downloadFile("soundscript-" + fileStamp() + ".txt", buildTXT(), "text/plain;charset=utf-8");
+    stat("File TXT scaricato.", 100);
+  };
+  const exMd = $("#expMd");
+  if (exMd) exMd.onclick = () => {
+    closeExportMenu();
+    downloadFile("soundscript-" + fileStamp() + ".md", buildMD(), "text/markdown;charset=utf-8");
+    stat("File Markdown scaricato.", 100);
+  };
+  const exPdf = $("#expPdf");
+  if (exPdf) exPdf.onclick = () => {
+    closeExportMenu();
+    ensurePrintView().innerHTML = buildDocHTML();
+    window.print();
+  };
 
   /* Tema manuale */
   const savedTheme = loadSettings().theme || "auto";
@@ -1545,7 +1679,7 @@ function renderKeyList() {
     li.dataset.id = entry.id;
 
     const handle = document.createElement("span");
-    handle.className = "handle"; handle.dataset.handle = "1"; handle.textContent = "⋮⋮";
+    handle.className = "handle"; handle.dataset.handle = "1"; handle.textContent = "⋮";
     li.appendChild(handle);
 
     const lab = document.createElement("span");
@@ -1996,6 +2130,7 @@ async function process(file) {
 function showTranscript(transcript, engine, duration, ms) {
   lastSttEngine = engine;
   lastDurSec = duration;
+  lastProcessDate = new Date();
   $("#resultStt").classList.remove("hidden");
   $("#engStt").textContent = engine + " · " + fmtMs(ms);
   $("#durStt").textContent = duration === null ? "n/d" : fmtDur(duration);
