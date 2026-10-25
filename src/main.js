@@ -41,6 +41,14 @@ let playerDragging = false;
 let playerSpeedIdx = 0;
 const PLAYER_SPEEDS = [1, 1.25, 1.5, 2, 0.75];
 
+/* ===== Annulla elaborazione ===== */
+let abortCtrl = null;
+function throwAbort() {
+  const e = new Error("Operazione annullata");
+  e.name = "AbortError";
+  throw e;
+}
+
 /* ===== Mappa portali chiavi API ===== */
 const KEY_PORTALS = {
   openai:    { name: "OpenAI",         url: "https://platform.openai.com/api-keys" },
@@ -272,6 +280,59 @@ function composeInstruction(t) {
   return p;
 }
 
+/* ===== Tema manuale ===== */
+function applyTheme(t) {
+  const root = document.documentElement;
+  if (t === "light" || t === "dark") root.dataset.theme = t;
+  else root.removeAttribute("data-theme");
+  const metas = document.querySelectorAll('meta[name="theme-color"]');
+  if (metas.length >= 2) {
+    const light = metas[0], dark = metas[1];
+    if (t === "light") { light.setAttribute("media", "all"); dark.setAttribute("media", "not all"); }
+    else if (t === "dark") { dark.setAttribute("media", "all"); light.setAttribute("media", "not all"); }
+    else {
+      light.setAttribute("media", "(prefers-color-scheme: light)");
+      dark.setAttribute("media", "(prefers-color-scheme: dark)");
+    }
+  }
+}
+
+/* ===== Feedback fine elaborazione ===== */
+function updateNotifDesc() {
+  const d = $("#notifDesc");
+  if (!d) return;
+  const on = !!loadSettings().notify;
+  if (!on) { d.textContent = "Vibrazione (Android) e notifica se sei su un'altra scheda"; return; }
+  if (!("Notification" in window)) { d.textContent = "Attivo: vibrazione (notifiche non supportate qui)"; return; }
+  if (Notification.permission === "granted") d.textContent = "Notifiche attive su questo browser";
+  else if (Notification.permission === "denied") d.textContent = "Permesso negato dal browser: resta la vibrazione";
+  else d.textContent = "Attivo: il permesso notifiche verrà chiesto alla prossima attivazione";
+}
+function notifyDone() {
+  const s = loadSettings();
+  if (!s.notify) return;
+  try { if (navigator.vibrate) navigator.vibrate(10); } catch (e) {}
+  try {
+    if (document.hidden && "Notification" in window && Notification.permission === "granted") {
+      new Notification("SoundScript", { body: "Trascrizione pronta" });
+    }
+  } catch (e) {}
+}
+
+/* ===== Badge di stato ===== */
+function renderStatusBadges() {
+  const row = $("#badgeRow");
+  if (!row) return;
+  const keys = loadSettings().keys.filter((k) => k.id !== "local").length;
+  const offline = localStorage.getItem("ss-local-ready") === "1";
+  let html = "";
+  if (offline) html += '<span class="hbadge ok"><span class="dot"></span>Offline pronto</span>';
+  if (keys > 0) html += '<span class="hbadge api"><span class="dot"></span>API attiva · ' + keys + (keys === 1 ? " chiave" : " chiavi") + '</span>';
+  if (!keys && !offline) html += '<span class="hbadge warn"><span class="dot"></span>Solo locale · nessun modello scaricato</span>';
+  if (!keys && offline) html += '<span class="hbadge warn"><span class="dot"></span>Solo locale</span>';
+  row.innerHTML = html;
+}
+
 /* ===== Cronologia: storage ===== */
 function loadHistory() {
   try { return JSON.parse(localStorage.getItem("vtt-history") || "[]"); }
@@ -394,6 +455,46 @@ function detachAudio() {
   setPlayingUI(false);
 }
 
+/* ===== Test chiave API (senza salvare) ===== */
+async function testApiKey() {
+  const out = $("#testResult");
+  if (!out) return;
+  out.className = "test-result";
+  const key = ($("#apiKey").value || "").trim();
+  if (!key) { out.textContent = "Incolla prima una chiave da testare."; out.classList.add("err"); return; }
+  out.textContent = "Verifica in corso…";
+  const temp = {
+    id: "test",
+    provider: providerChoice,
+    apiKey: key,
+    baseUrl: ($("#baseUrl").value || "").trim()
+  };
+  try {
+    const models = await listModels(temp);
+    const cls = classifyModels(models, (PROVIDERS[providerChoice] || PROVIDERS.openai).family);
+    out.textContent = "✓ Chiave valida · " + cls.stt.length + " modelli audio e " + cls.chat.length + " modelli chat";
+    out.classList.add("ok");
+  } catch (err) {
+    out.textContent = "✗ " + (describeError(err) || "errore sconosciuto");
+    out.classList.add("err");
+  }
+}
+
+/* ===== Pulsante Nuovo (reset sessione) ===== */
+function resetSession() {
+  detachAudio();
+  hasSummary = false;
+  const r = $("#resultStt"); if (r) r.classList.add("hidden");
+  const txt = $("#txt"); if (txt) txt.value = "";
+  const sum = $("#sum"); if (sum) sum.textContent = "Il TL;DR comparirà qui dopo l'elaborazione.";
+  const chip = $("#chipLlm"); if (chip) chip.hidden = true;
+  const regen = $("#regen"); if (regen) regen.textContent = "Genera TL;DR";
+  const all = $("#all"); if (all) all.disabled = true;
+  const bar = $("#bar"); if (bar) bar.style.width = "0%";
+  stat("Pronto.", 0);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 /* ===== Ultimi errori ===== */
 function loadLastErrors() {
   try { return JSON.parse(localStorage.getItem(LASTERR_KEY) || "{}"); }
@@ -408,7 +509,7 @@ function clearLastError(id) {
   if (id in m) { delete m[id]; localStorage.setItem(LASTERR_KEY, JSON.stringify(m)); }
 }
 function describeError(err) {
-  if (err && err.name === "AbortError") return "timeout della richiesta (rete lenta o bloccata)";
+  if (err && err.name === "AbortError") return "richiesta annullata";
   const st = err && err.status;
   if (st === 401 || st === 403) return "chiave non valida (HTTP " + st + ")";
   if (st === 402) return "crediti esauriti (HTTP 402)";
@@ -501,7 +602,7 @@ function stat(message, percent) {
   const bar = $("#bar");
   const eq = $("#eq");
   if (status) status.textContent = message;
-  if (bar) bar.style.width = percent + "%";
+  if (bar && percent != null) bar.style.width = percent + "%";
   if (eq) eq.hidden = !(percent > 0 && percent < 100);
 }
 
@@ -667,7 +768,7 @@ function renderHistory() {
 function loadHistoryEntry(h) {
   const txt = $("#txt");
   if (!txt) return;
-  detachAudio(); /* niente audio per le voci di cronologia */
+  detachAudio();
   txt.value = h.transcript || "";
   $("#resultStt").classList.remove("hidden");
   lastSttEngine = h.engine || "";
@@ -768,11 +869,15 @@ function render() {
       <div class="status-row">
         <div class="spinner" id="eq" hidden></div>
         <div id="status" class="status" role="status" aria-live="polite">Pronto.</div>
+        <button class="btn danger" id="cancelBtn" hidden>Annulla</button>
       </div>
       <div class="progress"><div id="bar" class="progress-bar"></div></div>
 
       <div id="resultStt" class="card hidden">
-        <div class="card-label">Trascrizione</div>
+        <div class="card-head">
+          <div class="card-label">Trascrizione</div>
+          <button class="btn ghostline" id="newBtn" style="min-height:36px;padding:0 14px" title="Svuota i campi e riparti da zero">↺ Nuovo</button>
+        </div>
         <div class="chips">
           <span class="chip">Motore: <b id="engStt"></b></span>
           <span class="chip">Durata: <b id="durStt"></b></span>
@@ -897,7 +1002,11 @@ function render() {
           <div class="faq-body">
             <div class="dd" id="ddProvider"></div>
             <div class="key-portal" id="keyPortal"></div>
-            <input id="apiKey" type="password" placeholder="Incolla qui la chiave API" style="margin-top:var(--space-sm)">
+            <div class="test-row">
+              <input id="apiKey" type="password" placeholder="Incolla qui la chiave API">
+              <button class="btn" id="testKeyBtn">Testa</button>
+            </div>
+            <div class="test-result" id="testResult"></div>
             <input id="baseUrl" type="text" placeholder="URL base (solo Personalizzato)" style="margin-top:var(--space-sm)">
             <div class="actions">
               <button id="saveKey" class="btn primary">Salva API key</button>
@@ -967,6 +1076,34 @@ function render() {
             ${CHEVRON_SVG}
           </summary>
           <div class="faq-body">
+            <div class="settings-item stack">
+              <div>
+                <div class="settings-item-title">Stato app</div>
+                <div class="settings-item-desc">Si aggiorna quando salvi la catena o scarichi i modelli locali</div>
+              </div>
+              <div class="hbadge-row" id="badgeRow"></div>
+            </div>
+            <div class="settings-item">
+              <div>
+                <div class="settings-item-title">Tema</div>
+                <div class="settings-item-desc">Auto segue il sistema; Chiaro/Scuro restano fissi</div>
+              </div>
+              <div class="seg" id="themeSeg" style="margin:0">
+                <button data-t="auto">Auto</button>
+                <button data-t="light">Chiaro</button>
+                <button data-t="dark">Scuro</button>
+              </div>
+            </div>
+            <div class="settings-item">
+              <div>
+                <div class="settings-item-title">Avvisami a fine elaborazione</div>
+                <div class="settings-item-desc" id="notifDesc">Vibrazione (Android) e notifica se sei su un'altra scheda</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="notifToggle">
+                <span class="track"></span>
+              </label>
+            </div>
             <div class="settings-item">
               <div>
                 <div class="settings-item-title">Aggiornamenti</div>
@@ -1023,6 +1160,40 @@ function render() {
   const he = $("#histExport"); if (he) he.onclick = exportHistory;
   const hc = $("#histClear"); if (hc) hc.onclick = clearHistory;
 
+  /* Annulla / Nuovo / Testa chiave */
+  const cb = $("#cancelBtn"); if (cb) cb.onclick = () => { if (abortCtrl) abortCtrl.abort(); };
+  const nb = $("#newBtn"); if (nb) nb.onclick = resetSession;
+  const tk = $("#testKeyBtn"); if (tk) tk.onclick = testApiKey;
+
+  /* Tema manuale */
+  const savedTheme = loadSettings().theme || "auto";
+  applyTheme(savedTheme);
+  document.querySelectorAll("#themeSeg button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.t === savedTheme);
+    b.onclick = () => {
+      document.querySelectorAll("#themeSeg button").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active");
+      saveSettings({ theme: b.dataset.t });
+      applyTheme(b.dataset.t);
+      stat("Tema: " + b.textContent, 100);
+    };
+  });
+
+  /* Feedback fine elaborazione */
+  const nt = $("#notifToggle");
+  if (nt) {
+    nt.checked = !!loadSettings().notify;
+    updateNotifDesc();
+    nt.onchange = async () => {
+      saveSettings({ notify: nt.checked });
+      if (nt.checked && "Notification" in window && Notification.permission === "default") {
+        try { await Notification.requestPermission(); } catch (e) {}
+      }
+      updateNotifDesc();
+      stat(nt.checked ? "Feedback di fine elaborazione attivo" : "Feedback di fine elaborazione disattivato", 100);
+    };
+  }
+
   $("#preload").onclick = async () => {
     if (busy) return;
     busy = true;
@@ -1040,6 +1211,8 @@ function render() {
       await getLLM(true);
       hideDlSpinner();
       showDlDone();
+      localStorage.setItem("ss-local-ready", "1");
+      renderStatusBadges();
       stat("Modelli locali pronti in cache.", 100);
     } catch (error) {
       hideDlSpinner();
@@ -1059,7 +1232,7 @@ function render() {
   buildLocalDD();
   renderKeyPortal(providerChoice);
 
-  document.querySelectorAll(".seg button").forEach((b) => {
+  document.querySelectorAll(".seg button[data-group], .seg[data-group] button").forEach((b) => {
     b.onclick = () => {
       const group = b.closest(".seg").dataset.group;
       const t = tldrSettings();
@@ -1094,7 +1267,7 @@ function render() {
     sum.classList.add("loading");
     sum.textContent = "Genero il TL;DR con le regole impostate…";
     try {
-      const r = await runSummaryChain(transcript, 0);
+      const r = await runSummaryChain(transcript, 0, null);
       if (r.summary) showTldr(r.summary, r.engine, "Riepilogo generato con le regole impostate.", r.ms);
       else showTldrFail(r.reasons);
       stat("Completato.", 100);
@@ -1133,6 +1306,7 @@ function render() {
     const localIndex = draftKeys.findIndex((k) => k.id === "local");
     draftKeys.splice(localIndex < 0 ? draftKeys.length : localIndex, 0, entry);
     $("#apiKey").value = ""; $("#baseUrl").value = "";
+    const tr = $("#testResult"); if (tr) { tr.textContent = ""; tr.className = "test-result"; }
     markDirty(); renderKeyList();
     msg.textContent = "Chiave aggiunta alla bozza. Rilevo i modelli disponibili…";
     try {
@@ -1162,6 +1336,7 @@ function render() {
     $("#keysMsg").textContent = "Ordine provider salvato e attivo.";
     updatePrefMsg();
     renderKeyList();
+    renderStatusBadges();
   };
 
   draftKeys = JSON.parse(JSON.stringify(loadSettings().keys));
@@ -1172,6 +1347,7 @@ function render() {
   syncTldrUi();
   renderPresets();
   renderHistory();
+  renderStatusBadges();
   loadShared();
 }
 
@@ -1250,6 +1426,7 @@ function buildProviderDD() {
       saveSettings({ lastProvider: id });
       buildProviderDD();
       renderKeyPortal(id);
+      const tr = $("#testResult"); if (tr) { tr.textContent = ""; tr.className = "test-result"; }
     }
   });
 }
@@ -1275,7 +1452,7 @@ function buildLocalDD() {
 /* ===== UI TL;DR ===== */
 function syncTldrUi() {
   const t = tldrSettings();
-  document.querySelectorAll(".seg").forEach((g) => {
+  document.querySelectorAll(".seg[data-group]").forEach((g) => {
     const k = g.dataset.group;
     g.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.v === t[k]));
   });
@@ -1464,6 +1641,7 @@ function wireDetails(det, entry) {
     draftKeys = draftKeys.filter((k) => k.id !== entry.id);
     markDirty();
     renderKeyList();
+    renderStatusBadges();
   };
   const sttBtn = det.querySelector('[data-savepref="stt"]');
   if (sttBtn) sttBtn.onclick = () => savePref(entry, "stt", det);
@@ -1605,6 +1783,7 @@ async function localTranscribe(file, audio) {
   }
   const transcriber = await getASR(false);
   const result = await transcriber(a, { language: "italian", task: "transcribe", chunk_length_s: 30, stride_length_s: 5 });
+  localStorage.setItem("ss-local-ready", "1");
   return (result.text || "").trim();
 }
 async function localSummarize(transcript, instruction) {
@@ -1616,6 +1795,7 @@ async function localSummarize(transcript, instruction) {
   const summarizer = await getLLM(false);
   const prompt = instruction + "\n\nTESTO:\n" + transcript;
   const output = await summarizer(prompt, { max_new_tokens: 200, temperature: 0.2, do_sample: false });
+  localStorage.setItem("ss-local-ready", "1");
   return (output[0]?.generated_text || "").replace(prompt, "").trim();
 }
 
@@ -1638,6 +1818,7 @@ async function callWithRetry(entry, slot, pct, makeCall) {
         else clearLastError(entry.id);
         return out;
       } catch (err) {
+        if (err && err.name === "AbortError") throw err; /* annullamento: niente retry */
         saveLastError(entry.id, describeError(err));
         const st = err && err.status;
         if (st === 401 || st === 403 || st === 402) throw err;
@@ -1657,21 +1838,23 @@ async function callWithRetry(entry, slot, pct, makeCall) {
   throw new Error("Tentativi esauriti per " + entryLabel(entry));
 }
 
-async function runSummaryChain(transcript, start) {
+async function runSummaryChain(transcript, start, signal) {
   const t0 = performance.now();
   const chain = loadSettings().keys;
   const instruction = composeInstruction(tldrSettings());
   const reasons = [];
   for (let i = start; i < chain.length; i++) {
     const entry = chain[i];
+    if (signal && signal.aborted) throwAbort();
     try {
       let summary;
       if (entry.id === "local") {
         summary = await localSummarize(transcript, instruction);
+        if (signal && signal.aborted) throwAbort();
       } else {
         stat("Riepilogo TL;DR con " + entryLabel(entry) + "…", 70);
         summary = await callWithRetry(entry, "llm", 70,
-          (e, m) => apiSummarize(transcript, Object.assign({}, e, { llmModel: m }), instruction));
+          (e, m) => apiSummarize(transcript, Object.assign({}, e, { llmModel: m }), instruction, signal));
       }
       if (summary) {
         return {
@@ -1683,6 +1866,7 @@ async function runSummaryChain(transcript, start) {
       }
       reasons.push(entryLabel(entry) + ": risposta vuota");
     } catch (error) {
+      if (error && error.name === "AbortError") throw error;
       console.warn("Riepilogo fallito (" + entryLabel(entry) + "):", error);
       reasons.push(entryLabel(entry) + ": " +
         (entry.id === "local"
@@ -1699,6 +1883,10 @@ async function process(file) {
   if (!file || file.size === 0) { stat("Il file audio è vuoto o non valido."); return; }
   busy = true;
   hasSummary = false;
+  abortCtrl = new AbortController();
+  const signal = abortCtrl.signal;
+  const cancelBtn = $("#cancelBtn");
+  if (cancelBtn) cancelBtn.hidden = false;
   const fileInput = $("#file");
   if (fileInput) fileInput.disabled = true;
   try {
@@ -1710,6 +1898,7 @@ async function process(file) {
     } catch (decErr) {
       console.warn("Decodifica non riuscita: durata sconosciuta.", decErr);
     }
+    if (signal.aborted) throwAbort();
     const autoTldr = duration === null || duration >= TLDR_AUTO_SECONDS;
 
     const tStt = performance.now();
@@ -1717,18 +1906,21 @@ async function process(file) {
     let transcript = "", sttEngine = "", okIndex = -1;
     for (let i = 0; i < chain.length; i++) {
       const entry = chain[i];
+      if (signal.aborted) throwAbort();
       try {
         if (entry.id === "local") {
           transcript = await localTranscribe(file, audio);
+          if (signal.aborted) throwAbort(); /* i modelli locali non si interrompono: si scarta il risultato */
           sttEngine = "locale";
         } else {
           stat("Trascrizione con " + entryLabel(entry) + "…", 30);
           transcript = await callWithRetry(entry, "stt", 30,
-            (e, m) => apiTranscribe(file, Object.assign({}, e, { sttModel: m })));
+            (e, m) => apiTranscribe(file, Object.assign({}, e, { sttModel: m }), signal));
           sttEngine = "API " + entryLabel(entry);
         }
         if (transcript) { okIndex = i; break; }
       } catch (error) {
+        if (error && error.name === "AbortError") throw error;
         console.warn("Voce catena fallita (" + entryLabel(entry) + "):", error);
         stat(entryLabel(entry) + " non disponibile (" +
           (loadLastErrors()[entry.id] || "errore") + "): provo la successiva…", 30);
@@ -1736,13 +1928,13 @@ async function process(file) {
     }
     if (!transcript) throw new Error("Nessuna chiave né il modello locale hanno riconosciuto testo.");
     showTranscript(transcript, sttEngine, duration, performance.now() - tStt);
-    attachAudio(file); /* player sul file appena elaborato */
+    attachAudio(file);
 
     if (autoTldr) {
       $("#autoNote").textContent = duration === null
         ? "Durata non leggibile: il riepilogo viene generato automaticamente."
         : "Audio oltre il minuto (" + fmtDur(duration) + "): il riepilogo viene generato automaticamente.";
-      const r = await runSummaryChain(transcript, okIndex);
+      const r = await runSummaryChain(transcript, okIndex, signal);
       if (r.summary) showTldr(r.summary, r.engine, null, r.ms);
       else showTldrFail(r.reasons);
     } else {
@@ -1752,12 +1944,20 @@ async function process(file) {
       $("#regen").textContent = "Genera TL;DR";
     }
     pushHistoryEntry();
+    renderStatusBadges();
+    notifyDone();
     stat("Completato e salvato in cronologia.", 100);
   } catch (error) {
-    console.error("Errore durante l'elaborazione:", error);
-    stat("Impossibile elaborare l'audio: " + (error?.message || String(error)), 0);
+    if (error && error.name === "AbortError") {
+      stat("Elaborazione annullata. Pronto a riprovare.", 0);
+    } else {
+      console.error("Errore durante l'elaborazione:", error);
+      stat("Impossibile elaborare l'audio: " + (error?.message || String(error)), 0);
+    }
   } finally {
     busy = false;
+    abortCtrl = null;
+    const cb2 = $("#cancelBtn"); if (cb2) cb2.hidden = true;
     if (fileInput) fileInput.disabled = false;
   }
 }

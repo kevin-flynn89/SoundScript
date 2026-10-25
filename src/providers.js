@@ -15,37 +15,51 @@ const ENDPOINTS = {
 
 export const PROVIDERS = ENDPOINTS;
 
-export async function listModels(entry) {
+export async function listModels(entry, signal) {
   const p = ENDPOINTS[entry.provider] || ENDPOINTS.custom;
   const base = (entry.baseUrl && entry.baseUrl.trim()) || p.baseUrl;
   if (!base) return [];
 
-  // Anthropic non espone una lista modelli pubblica via API → elenco fisso
-  if (entry.provider === "anthropic") {
-    return [
-      { id: "claude-opus-4-5",       label: "Claude Opus 4.5" },
-      { id: "claude-sonnet-4-5",     label: "Claude Sonnet 4.5" },
-      { id: "claude-3-5-haiku-latest", label: "Claude 3.5 Haiku (consigliato)" },
-      { id: "claude-3-5-sonnet-latest", label: "Claude 3.5 Sonnet" },
-      { id: "claude-3-opus-latest",   label: "Claude 3 Opus" }
-    ];
+  /* Anthropic: chiamata reale a /v1/models (così il tasto Testa è significativo) */
+  if (p.family === "anthropic") {
+    const url = base.replace(/\/$/, "") + "/models";
+    const res = await fetch(url, {
+      headers: { "x-api-key": entry.apiKey, "anthropic-version": "2023-06-01" },
+      signal
+    });
+    if (!res.ok) {
+      const err = new Error("HTTP " + res.status);
+      err.status = res.status;
+      throw err;
+    }
+    const data = await res.json();
+    return (data.data || []).map((m) => ({ id: m.id, label: m.id }));
   }
 
-  // Google Gemini
+  /* Google Gemini */
   if (p.family === "google") {
     const url = base.replace(/\/$/, "") + "/models?key=" + encodeURIComponent(entry.apiKey);
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("HTTP " + res.status);
+    const res = await fetch(url, { signal });
+    if (!res.ok) {
+      const err = new Error("HTTP " + res.status);
+      err.status = res.status;
+      throw err;
+    }
     const data = await res.json();
     return (data.models || []).map((m) => ({ id: m.name, label: m.name }));
   }
 
-  // OpenAI-compatibili (OpenAI, Groq, Mistral, custom)
+  /* OpenAI-compatibili (OpenAI, Groq, Mistral, custom) */
   const url = base.replace(/\/$/, "") + "/models";
   const res = await fetch(url, {
-    headers: { "Authorization": "Bearer " + entry.apiKey }
+    headers: { "Authorization": "Bearer " + entry.apiKey },
+    signal
   });
-  if (!res.ok) throw new Error("HTTP " + res.status);
+  if (!res.ok) {
+    const err = new Error("HTTP " + res.status);
+    err.status = res.status;
+    throw err;
+  }
   const data = await res.json();
   return (data.data || []).map((m) => ({ id: m.id, label: m.id }));
 }
@@ -56,18 +70,13 @@ export function classifyModels(models, family) {
   for (const m of models) {
     const id = m.id || m.name || "";
     const low = id.toLowerCase();
-    // STT
-    if (/whisper|transcribe|voxtral|speech|asr|audio/i.test(low) && family !== "anthropic") {
-      stt.push({ id, label: id });
-    } else if (family === "google" && /audio|speech|transcribe/i.test(low)) {
+    if (family === "anthropic") {
+      chat.push({ id, label: m.label || id });
+    } else if (/whisper|transcribe|voxtral|speech|asr|audio/i.test(low)) {
       stt.push({ id, label: id });
     } else if (family === "google" && /flash|pro|gemini/i.test(low)) {
-      // Gemini può fare entrambi: va in entrambi
       stt.push({ id, label: id + " (audio)" });
       chat.push({ id, label: id });
-    } else if (family === "anthropic") {
-      // Anthropic solo chat
-      chat.push({ id, label: m.label || id });
     } else {
       chat.push({ id, label: id });
     }
@@ -75,19 +84,25 @@ export function classifyModels(models, family) {
   return { stt, chat };
 }
 
-export async function apiTranscribe(file, entry) {
+export async function apiTranscribe(file, entry, signal) {
   const p = ENDPOINTS[entry.provider] || ENDPOINTS.custom;
   if (p.chatOnly) throw new Error("Questo provider non supporta la trascrizione audio");
 
   const base = (entry.baseUrl && entry.baseUrl.trim()) || p.baseUrl;
   const model = entry.sttModel || p.recommended.stt;
 
-  // Google Gemini (audio)
+  /* Google Gemini (audio inline) */
   if (p.family === "google") {
     const url = base.replace(/\/$/, "") + "/" + model + ":generateContent?key=" + encodeURIComponent(entry.apiKey);
     const bytes = await file.arrayBuffer();
     const mime = file.type || "audio/ogg";
-    const b64 = btoa(String.fromCharCode(...new Uint8Array(bytes)));
+    let b64 = "";
+    const chunk = 32768;
+    const u8 = new Uint8Array(bytes);
+    for (let i = 0; i < u8.length; i += chunk) {
+      b64 += String.fromCharCode.apply(null, u8.subarray(i, i + chunk));
+    }
+    b64 = btoa(b64);
     const body = {
       contents: [{
         parts: [
@@ -99,7 +114,8 @@ export async function apiTranscribe(file, entry) {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal
     });
     if (!res.ok) {
       const err = new Error("HTTP " + res.status);
@@ -107,11 +123,11 @@ export async function apiTranscribe(file, entry) {
       throw err;
     }
     const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join(" ") || "";
+    const text = data?.candidates?.[0]?.content?.parts?.map((x) => x.text || "").join(" ") || "";
     return text.trim();
   }
 
-  // Mistral Voxtral (multipart)
+  /* Mistral Voxtral (multipart) */
   if (entry.provider === "mistral") {
     const url = base.replace(/\/$/, "") + "/audio/transcriptions";
     const fd = new FormData();
@@ -121,7 +137,8 @@ export async function apiTranscribe(file, entry) {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Authorization": "Bearer " + entry.apiKey },
-      body: fd
+      body: fd,
+      signal
     });
     if (!res.ok) {
       const err = new Error("HTTP " + res.status);
@@ -132,7 +149,7 @@ export async function apiTranscribe(file, entry) {
     return (data.text || "").trim();
   }
 
-  // OpenAI-compatibili (OpenAI, Groq, custom)
+  /* OpenAI-compatibili (OpenAI, Groq, custom) */
   const url = base.replace(/\/$/, "") + "/audio/transcriptions";
   const fd = new FormData();
   fd.append("file", file, file.name || "audio");
@@ -141,7 +158,8 @@ export async function apiTranscribe(file, entry) {
   const res = await fetch(url, {
     method: "POST",
     headers: { "Authorization": "Bearer " + entry.apiKey },
-    body: fd
+    body: fd,
+    signal
   });
   if (!res.ok) {
     const err = new Error("HTTP " + res.status);
@@ -152,13 +170,13 @@ export async function apiTranscribe(file, entry) {
   return (data.text || "").trim();
 }
 
-export async function apiSummarize(transcript, entry, instruction) {
+export async function apiSummarize(transcript, entry, instruction, signal) {
   const p = ENDPOINTS[entry.provider] || ENDPOINTS.custom;
   const base = (entry.baseUrl && entry.baseUrl.trim()) || p.baseUrl;
   const model = entry.llmModel || p.recommended.llm;
   const prompt = instruction + "\n\nTESTO:\n" + transcript;
 
-  // Anthropic (Messages API)
+  /* Anthropic (Messages API) */
   if (p.family === "anthropic") {
     const url = base.replace(/\/$/, "") + "/messages";
     const res = await fetch(url, {
@@ -172,7 +190,8 @@ export async function apiSummarize(transcript, entry, instruction) {
         model: model,
         max_tokens: 1024,
         messages: [{ role: "user", content: prompt }]
-      })
+      }),
+      signal
     });
     if (!res.ok) {
       const err = new Error("HTTP " + res.status);
@@ -184,7 +203,7 @@ export async function apiSummarize(transcript, entry, instruction) {
     return text.trim();
   }
 
-  // Google Gemini
+  /* Google Gemini */
   if (p.family === "google") {
     const url = base.replace(/\/$/, "") + "/" + model + ":generateContent?key=" + encodeURIComponent(entry.apiKey);
     const body = {
@@ -194,7 +213,8 @@ export async function apiSummarize(transcript, entry, instruction) {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal
     });
     if (!res.ok) {
       const err = new Error("HTTP " + res.status);
@@ -202,11 +222,11 @@ export async function apiSummarize(transcript, entry, instruction) {
       throw err;
     }
     const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join(" ") || "";
+    const text = data?.candidates?.[0]?.content?.parts?.map((x) => x.text || "").join(" ") || "";
     return text.trim();
   }
 
-  // OpenAI-compatibili
+  /* OpenAI-compatibili */
   const url = base.replace(/\/$/, "") + "/chat/completions";
   const res = await fetch(url, {
     method: "POST",
@@ -221,7 +241,8 @@ export async function apiSummarize(transcript, entry, instruction) {
         { role: "system", content: "Sei un assistente che riassume messaggi vocali in modo fedele." },
         { role: "user", content: prompt }
       ]
-    })
+    }),
+    signal
   });
   if (!res.ok) {
     const err = new Error("HTTP " + res.status);
