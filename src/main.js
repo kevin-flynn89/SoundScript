@@ -14,6 +14,10 @@ const LASTERR_KEY = "vtt-lasterr";
 const TLDR_AUTO_SECONDS = 60;
 const APP_VERSION = (typeof __APP_VERSION__ === "string") ? __APP_VERSION__ : "build dev";
 
+/* Rilevamento iOS (per la domanda FAQ sul limite di condivisione) */
+const IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
 let asr = null;
 let llm = null;
 let busy = false;
@@ -49,16 +53,6 @@ function throwAbort() {
   throw e;
 }
 
-/* ===== Rilevamento iOS ===== */
-const isIOS = (() => {
-  try {
-    const ua = navigator.userAgent || "";
-    if (/iphone|ipad|ipod/i.test(ua)) return true;
-    if (navigator.platform === "MacIntel" && (navigator.maxTouchPoints || 0) > 1) return true;
-  } catch (e) {}
-  return false;
-})();
-
 /* ===== Mappa portali chiavi API ===== */
 const KEY_PORTALS = {
   openai:    { name: "OpenAI",         url: "https://platform.openai.com/api-keys" },
@@ -69,8 +63,10 @@ const KEY_PORTALS = {
   custom:    null
 };
 
-/* ===== Service worker & aggiornamenti ===== */
+/* ===== Service worker: aggiornamento silenzioso ===== */
 let swReg = null;
+let swHadController = false;
+let swCheckInProgress = false;
 let toastTimer = null;
 
 const TOAST_ICONS = {
@@ -96,20 +92,6 @@ function renderToast(html, sticky) {
   t.classList.add("show");
   if (!sticky) toastTimer = setTimeout(hideToast, 3000);
 }
-
-function showUpdatedToast() {
-  const t = $("#toast");
-  if (!t) return;
-  t.className = "toast";
-  renderToast(`
-    <div class="toast-head">
-      <div class="toast-ico success">${TOAST_ICONS.success}</div>
-      <div class="toast-title">Aggiornato alla ${APP_VERSION}</div>
-      <button class="toast-close" data-toast-close aria-label="Chiudi">${TOAST_ICONS.close}</button>
-    </div>
-    <div class="toast-desc">Nuova versione attivata in background. Ricarica la pagina se vedi comportamenti strani.</div>
-  `, false);
-}
 function showStatusToast(type) {
   const t = $("#toast");
   if (!t) return;
@@ -134,60 +116,56 @@ function showStatusToast(type) {
     `, false);
   }
 }
-function forceSwActivation() {
-  if (swReg && swReg.waiting) {
-    swReg.waiting.postMessage({ type: "SKIP_WAITING" });
-    const t = $("#toast");
-    if (t) t.className = "toast";
-    renderToast(`
-      <div class="toast-head">
-        <div class="toast-ico update">${TOAST_ICONS.update}</div>
-        <div class="toast-title">Aggiornamento in corso…</div>
-      </div>
-      <div class="toast-desc">L'app si sta ricaricando con la nuova versione.</div>
-    `, false);
-  }
+function showInfoToast(title, desc) {
+  const t = $("#toast");
+  if (!t) return;
+  t.className = "toast";
+  renderToast(`
+    <div class="toast-head">
+      <div class="toast-ico update">${TOAST_ICONS.update}</div>
+      <div class="toast-title">${title}</div>
+      <button class="toast-close" data-toast-close aria-label="Chiudi">${TOAST_ICONS.close}</button>
+    </div>
+    <div class="toast-desc">${desc}</div>
+  `, false);
 }
 async function checkForUpdates() {
   const btn = $("#checkUpdateBtn");
   const label = $("#checkUpdateLabel");
   if (btn) btn.disabled = true;
   if (label) label.innerHTML = '<span class="mini-spinner"></span>';
+  swCheckInProgress = true;
   try {
     if (!("serviceWorker" in navigator) || !swReg) throw new Error("sw-non-disponibile");
+    const before = navigator.serviceWorker.controller;
     await swReg.update();
-    await sleep(1200);
-    showStatusToast("success");
+    await sleep(1500);
+    const after = navigator.serviceWorker.controller;
+    if (after && after !== before) {
+      showInfoToast("Nuova versione installata", "Sarà attiva dal prossimo avvio dell'app.");
+    } else {
+      showStatusToast("success");
+    }
   } catch (err) {
     showStatusToast("warning");
   } finally {
+    swCheckInProgress = false;
     if (btn) btn.disabled = false;
     if (label) label.textContent = "Controlla";
   }
 }
-function setupSwUpdates(reg) {
-  swReg = reg;
-  reg.addEventListener("updatefound", () => {
-    const nw = reg.installing;
-    if (!nw) return;
-    nw.addEventListener("statechange", () => {
-      if (nw.state === "installed" && navigator.serviceWorker.controller) {
-        nw.postMessage({ type: "SKIP_WAITING" });
-      }
-    });
-  });
-  if (reg.waiting && navigator.serviceWorker.controller) {
-    reg.waiting.postMessage({ type: "SKIP_WAITING" });
-  }
-}
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    showUpdatedToast();
+    /* Un nuovo SW ha preso il controllo durante la sessione: avviso leggero, mai bloccante */
+    if (swHadController && !swCheckInProgress) {
+      showInfoToast("Nuova versione installata", "Sarà attiva dal prossimo avvio dell'app.");
+    }
   });
   window.addEventListener("load", async () => {
     try {
+      swHadController = !!navigator.serviceWorker.controller;
       const reg = await navigator.serviceWorker.register("./sw.js");
-      setupSwUpdates(reg);
+      swReg = reg;
       try { await reg.update(); } catch (e) {}
     } catch (error) {
       console.error("Registrazione service worker fallita:", error);
@@ -617,8 +595,8 @@ const TLDR_SVG = `<svg viewBox="0 0 24 24"><path d="M4 6h9"/><path d="M4 12h6"/>
 const HIST_SVG = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>`;
 const KEY_SVG = `<svg viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="3.5"/><path d="M10 13 19 4"/><path d="M17 6l2 2"/><path d="M14 9l1.5 1.5"/></svg>`;
 const CHIP_SVG = `<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><rect x="10.5" y="10.5" width="3" height="3"/><path d="M10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M2 14h3M19 10h3M19 14h3"/></svg>`;
+const FAQ_SVG = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .2c0 1.8-2.5 2-2.5 3.3"/><circle cx="12" cy="17" r=".5"/></svg>`;
 const REFRESH_SVG = `<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>`;
-const FAQ_SVG = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .2c0 1.8-2.5 2-2.5 3.3"/><circle cx="12" cy="17" r=".5" fill="currentColor" stroke="none"/></svg>`;
 const DROP_MARK_SVG = `<svg class="drop-mark" viewBox="0 0 80 64" aria-hidden="true">
   <defs><linearGradient id="dz-mark" x1="0" y1="0" x2="1" y2="1">
     <stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#06b6d4"/>
@@ -628,10 +606,8 @@ const DROP_MARK_SVG = `<svg class="drop-mark" viewBox="0 0 80 64" aria-hidden="t
   <circle cx="72" cy="56" r="4.5" fill="#06b6d4"/>
 </svg>`;
 
-/* Cheveron grande (sezioni principali) */
 const CHEVRON_SVG = `<svg class="chev" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>`;
-/* Chevron piccolo (FAQ annidate) — stesso path, solo dimensioni ridotte */
-const CHEV_SVG = `<svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>`;
+const CHEV_SVG = `<svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>`;
 const TICK_SVG = `<svg class="tick" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M378-246 154-470l43-43 181 181 384-384 43 43-427 427Z"/></svg>`;
 
 /* ===== Menu a tendina custom ===== */
@@ -1078,48 +1054,46 @@ function render() {
           </div>
         </details>
 
-        <!-- SEZIONE: Domande frequenti -->
         <details class="faq-item t5" id="faqFaq">
           <summary>
             <span class="si" aria-hidden="true">${FAQ_SVG}</span>
             <span class="ttl">Domande frequenti</span>
             ${CHEVRON_SVG}
           </summary>
-          <div class="faq-body" style="padding-top:0">
-            ${isIOS ? `
-            <details class="faq-item t5 faq-nested" open>
+          <div class="faq-body">
+            ${IS_IOS ? `
+            <details class="faq-sub" open>
               <summary>
                 <span class="ttl">Perché su iPhone non posso condividere audio da WhatsApp?</span>
                 ${CHEV_SVG}
               </summary>
-              <div class="faq-body">
+              <div class="faq-sub-body">
                 <p>È un limite di iOS: il sistema non consente alle app web installate di comparire nel menu Condividi di WhatsApp (su Android e desktop invece funziona).</p>
-                <p style="margin-top:var(--space-xs)"><b>Percorso alternativo su iPhone/iPad:</b></p>
+                <p><b>Percorso alternativo su iPhone/iPad:</b></p>
                 <ol>
                   <li>In WhatsApp, tieni premuto il vocale → <b>Inoltra/Condividi</b> → <b>Salva su File</b></li>
                   <li>Apri SoundScript e tocca <b>"Scegli audio"</b></li>
                   <li>Seleziona il file appena salvato dall'app <b>File</b></li>
                 </ol>
-                <p style="margin-top:var(--space-xs)">Il risultato è identico: trascrizione, TL;DR e player funzionano come al solito.</p>
+                <p>Il risultato è identico: trascrizione, TL;DR e player funzionano come al solito.</p>
               </div>
-            </details>
-            ` : ""}
-            <details class="faq-item t5 faq-nested">
+            </details>` : ""}
+            <details class="faq-sub">
               <summary>
                 <span class="ttl">Dove vengono salvati i miei audio e le trascrizioni?</span>
                 ${CHEV_SVG}
               </summary>
-              <div class="faq-body">
+              <div class="faq-sub-body">
                 <p>Gli audio <b>non</b> vengono conservati: restano in memoria solo per la sessione corrente (player). Le trascrizioni e i TL;DR vivono nella cronologia locale del dispositivo, mai su server.</p>
               </div>
             </details>
-            <details class="faq-item t5 faq-nested">
+            <details class="faq-sub">
               <summary>
                 <span class="ttl">Perché i vocali brevi non ricevono il TL;DR automatico?</span>
                 ${CHEV_SVG}
               </summary>
-              <div class="faq-body">
-                <p>Sotto i 60 secondi il riepilogo suele essere superfluo: lo generi tu con <b>"Genera TL;DR"</b> se ti serve. Sopra il minuto parte da solo.</p>
+              <div class="faq-sub-body">
+                <p>Sotto i 60 secondi il riepilogo è spesso superfluo: lo generi tu con <b>"Genera TL;DR"</b> se ti serve. Sopra il minuto parte da solo.</p>
               </div>
             </details>
           </div>
@@ -1163,7 +1137,7 @@ function render() {
             <div class="settings-item">
               <div>
                 <div class="settings-item-title">Aggiornamenti</div>
-                <div class="settings-item-desc">Le nuove versioni si attivano in automatico. Qui puoi verificare manualmente</div>
+                <div class="settings-item-desc">Automatici e silenziosi: le nuove versioni si attivano in background</div>
               </div>
               <button class="btn" id="checkUpdateBtn"><span id="checkUpdateLabel">Controlla</span></button>
             </div>
@@ -1173,6 +1147,10 @@ function render() {
                 <div class="settings-item-desc" id="appVersion">—</div>
               </div>
             </div>
+            <p class="muted" style="margin-top:var(--space-sm)">
+              Nessun toast da confermare: quando esce una nuova versione il service worker si aggiorna da solo
+              e te lo segnaliamo con un avviso leggero. "Controlla" serve solo per una verifica manuale.
+            </p>
           </div>
         </details>
       </div>
@@ -1283,14 +1261,16 @@ function render() {
   buildLocalDD();
   renderKeyPortal(providerChoice);
 
-  document.querySelectorAll(".seg button[data-group], .seg[data-group] button").forEach((b) => {
-    b.onclick = () => {
-      const group = b.closest(".seg").dataset.group;
-      const t = tldrSettings();
-      t[group] = b.dataset.v;
-      saveSettings({ tldr: t });
-      syncTldrUi();
-    };
+  document.querySelectorAll(".seg[data-group]").forEach((g) => {
+    g.querySelectorAll("button").forEach((b) => {
+      b.onclick = () => {
+        const group = g.dataset.group;
+        const t = tldrSettings();
+        t[group] = b.dataset.v;
+        saveSettings({ tldr: t });
+        syncTldrUi();
+      };
+    });
   });
   $("#tldrCustom").oninput = (e) => {
     const t = tldrSettings();
