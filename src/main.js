@@ -54,6 +54,91 @@ function throwAbort() {
   throw e;
 }
 
+/* ===== 1new · Draft su ricarica (sessionStorage) ===== */
+const DRAFT_KEYS = {
+  txt: "ss-draft-txt",
+  sum: "ss-draft-sum",
+  has: "ss-draft-has-sum",
+  eng: "ss-draft-engine",
+  dur: "ss-draft-dur",
+  date: "ss-draft-date"
+};
+let draftTimer = null;
+
+function writeDraft() {
+  try {
+    const t = $("#txt");
+    if (!t) return;
+    sessionStorage.setItem(DRAFT_KEYS.txt, t.value);
+    sessionStorage.setItem(DRAFT_KEYS.sum, (($("#sum") && $("#sum").textContent) || ""));
+    sessionStorage.setItem(DRAFT_KEYS.has, hasSummary ? "1" : "0");
+    sessionStorage.setItem(DRAFT_KEYS.eng, lastSttEngine || "");
+    sessionStorage.setItem(DRAFT_KEYS.dur, lastDurSec != null ? String(lastDurSec) : "");
+    sessionStorage.setItem(DRAFT_KEYS.date, lastProcessDate ? lastProcessDate.toISOString() : "");
+  } catch (e) {}
+}
+function queueDraft() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(writeDraft, 500); /* debounce 500 ms */
+}
+function clearDraft() {
+  try { Object.values(DRAFT_KEYS).forEach((k) => sessionStorage.removeItem(k)); } catch (e) {}
+}
+function restoreDraft() {
+  try {
+    const t = sessionStorage.getItem(DRAFT_KEYS.txt);
+    const has = sessionStorage.getItem(DRAFT_KEYS.has);
+    if (!t || (!t.trim() && has !== "1")) return;
+    const txtEl = $("#txt");
+    if (!txtEl) return;
+    txtEl.value = t;
+    hasSummary = has === "1";
+    const sumEl = $("#sum");
+    const s = sessionStorage.getItem(DRAFT_KEYS.sum);
+    if (sumEl) sumEl.textContent = (s !== null && s !== "") ? s : "Il TL;DR comparirà qui dopo l'elaborazione.";
+    lastSttEngine = sessionStorage.getItem(DRAFT_KEYS.eng) || "";
+    const d = sessionStorage.getItem(DRAFT_KEYS.dur);
+    lastDurSec = (d !== null && d !== "") ? Number(d) : null;
+    const dt = sessionStorage.getItem(DRAFT_KEYS.date);
+    if (dt) {
+      const p = new Date(dt);
+      if (!isNaN(p.getTime())) lastProcessDate = p;
+    }
+    $("#resultStt").classList.remove("hidden");
+    $("#engStt").textContent = (lastSttEngine || "—") + " · sessione ripristinata";
+    $("#durStt").textContent = lastDurSec != null ? fmtDur(lastDurSec) : "n/d";
+    $("#all").disabled = false;
+    $("#chipLlm").hidden = true;
+    $("#regen").textContent = hasSummary ? "⟳ Rigenera TL;DR" : "Genera TL;DR";
+    announce("Bozza ripristinata dopo il ricaricamento.");
+  } catch (e) {}
+}
+
+/* ===== 2new · Incolla file dagli appunti ===== */
+function isAudioFile(f) {
+  if (!f) return false;
+  if (f.type && f.type.startsWith("audio/")) return true;
+  return /\.(ogg|opus|mp3|wav|m4a|aac|flac|webm)$/i.test(f.name || "");
+}
+document.addEventListener("paste", (e) => {
+  const files = e.clipboardData && e.clipboardData.files;
+  if (!files || !files.length) return; /* incolla di testo normale: ignora */
+  for (const f of files) {
+    if (isAudioFile(f)) {
+      e.preventDefault();
+      const drop = $("#drop");
+      if (drop) {
+        drop.classList.add("over"); /* lampeggio: riuso dello stile drag-over */
+        setTimeout(() => drop.classList.remove("over"), 700);
+      }
+      announce("Audio ricevuto dagli appunti.");
+      process(f);
+      return;
+    }
+  }
+  stat("Negli appunti non c'è un audio utilizzabile.", 0);
+});
+
 /* ===== Mappa portali chiavi API ===== */
 const KEY_PORTALS = {
   openai:    { name: "OpenAI",         url: "https://platform.openai.com/api-keys" },
@@ -90,7 +175,7 @@ const TOAST_ICONS = {
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
 };
 
-/* ===== B · Annunci per lettori schermo (regione live unica) ===== */
+/* ===== B · Annunci per lettori schermo ===== */
 let srTimer = null;
 function announce(msg) {
   const el = $("#srStatus");
@@ -504,6 +589,7 @@ function resetSession() {
   const regen = $("#regen"); if (regen) regen.textContent = "Genera TL;DR";
   const all = $("#all"); if (all) all.disabled = true;
   const bar = $("#bar"); if (bar) bar.style.width = "0%";
+  clearDraft(); /* niente più bozza dopo il reset */
   stat("Pronto.", 0);
   announce("Campi svuotati. Pronto per un nuovo audio.");
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -880,6 +966,7 @@ function loadHistoryEntry(h) {
   $("#chipLlm").hidden = true;
   $("#regen").textContent = "Genera TL;DR";
   $("#all").disabled = false;
+  writeDraft(); /* la bozza segue ciò che stai vedendo */
   stat("Voce caricata dalla cronologia.", 100);
   announce("Voce caricata dalla cronologia.");
   $("#resultStt").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -956,7 +1043,7 @@ function render() {
       <div class="drop" id="drop">
         ${DROP_MARK_SVG}
         <strong>Trascina qui un audio</strong>
-        <span>oppure tocca per scegliere un file</span>
+        <span>oppure tocca per scegliere un file, o incollalo con Ctrl+V</span>
         <button id="pick" class="btn primary" style="margin-top:var(--space-md)">Scegli audio</button>
         <input id="file" class="hidden" type="file"
           accept="audio/*,.ogg,.opus,.m4a,.mp3,.wav,.aac">
@@ -1212,7 +1299,7 @@ function render() {
                 ${CHEV_SVG}
               </summary>
               <div class="faq-sub-body">
-                <p>Gli audio <b>non</b> vengono conservati: restano in memoria solo per la sessione corrente (player). Le trascrizioni e i TL;DR vivono nella cronologia locale del dispositivo, mai su server.</p>
+                <p>Gli audio <b>non</b> vengono conservati: restano in memoria solo per la sessione corrente (player). Le trascrizioni e i TL;DR vivono nella cronologia locale del dispositivo, mai su server. Se ricarichi la pagina per errore, l'ultima sessione resta recuperata come bozza.</p>
               </div>
             </details>
             <details class="faq-sub">
@@ -1311,6 +1398,10 @@ function render() {
     const file = e.dataTransfer?.files?.[0];
     if (file) process(file);
   };
+
+  /* Draft: salvataggio con debounce sull'input del testo */
+  const txtEl = $("#txt");
+  if (txtEl) txtEl.addEventListener("input", queueDraft);
 
   /* Cronologia wiring */
   const hs = $("#histSearch"); if (hs) hs.oninput = () => renderHistory();
@@ -1439,6 +1530,7 @@ function render() {
     t.custom = e.target.value;
     saveSettings({ tldr: t });
     syncTldrUi();
+    queueDraft(); /* le istruzioni custom non fanno parte del draft testo, ma non disturbano */
   };
   $("#savePreset").onclick = () => {
     const name = $("#presetName").value.trim();
@@ -1549,6 +1641,7 @@ function render() {
   renderPresets();
   renderHistory();
   renderStatusBadges();
+  restoreDraft(); /* 1new: ripristina testo/riepilogo dopo un reload */
   loadShared();
 }
 
@@ -1568,6 +1661,7 @@ function showTldrFail(reasons) {
   $("#chipLlm").hidden = true;
   $("#regen").textContent = "⟳ Rigenera TL;DR";
   $("#all").disabled = false;
+  writeDraft();
 }
 
 /* ===== UI download ===== */
@@ -2147,6 +2241,7 @@ async function process(file) {
         "): trascrizione completata. Il riepilogo non è stato generato automaticamente.";
       $("#sum").textContent = "Nessun TL;DR per ora: tocca Genera TL;DR se ti serve.";
       $("#regen").textContent = "Genera TL;DR";
+      writeDraft();
     }
     pushHistoryEntry();
     renderStatusBadges();
@@ -2177,6 +2272,7 @@ function showTranscript(transcript, engine, duration, ms) {
   $("#durStt").textContent = duration === null ? "n/d" : fmtDur(duration);
   $("#txt").value = transcript;
   $("#all").disabled = false;
+  writeDraft();
 }
 function showTldr(summary, engine, note, ms) {
   hasSummary = true;
@@ -2191,6 +2287,7 @@ function showTldr(summary, engine, note, ms) {
   updateTldrMeta();
   $("#all").disabled = false;
   attachSummaryToLatest(summary);
+  writeDraft();
 }
 
 async function copyText(text) {
