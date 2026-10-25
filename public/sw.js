@@ -1,6 +1,6 @@
 /* Timbro di build: viene sostituito automaticamente da vite.config.js
    a ogni deploy. Serve solo a far cambiare i byte di questo file,
-   così il browser rileva la nuova versione e mostra il toast. */
+   così il browser rileva la nuova versione. */
 const SW_BUILD = "__SW_BUILD__";
 
 const CORE_CACHE = "soundscript-core-v2";
@@ -23,7 +23,10 @@ self.addEventListener("install", (event) => {
       .then((cache) => cache.addAll(CORE_ASSETS))
       .catch(() => {})
   );
-  // Niente skipWaiting: la nuova versione entra solo quando l'utente conferma
+  /* Soluzione A: attivazione silenziosa del SW nuovo, senza attendere
+     la chiusura delle tab. Il main.js mostrerà un toast informativo
+     leggero quando il controllerchange scatterà. */
+  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
@@ -38,6 +41,7 @@ self.addEventListener("activate", (event) => {
   })());
 });
 
+/* Messaggio residuo (retrocompatibilità con versioni precedenti). */
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") {
     self.skipWaiting();
@@ -48,7 +52,6 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
 
-  // Condivisione audio da WhatsApp (POST)
   if (req.method === "POST" && url.pathname.endsWith("/share-target.html")) {
     event.respondWith(handleShare(req));
     return;
@@ -56,7 +59,6 @@ self.addEventListener("fetch", (event) => {
 
   if (req.method !== "GET" || url.origin !== self.location.origin) return;
 
-  // Navigazioni: prima la rete, così i nuovi contenuti arrivano subito
   if (req.mode === "navigate") {
     event.respondWith(
       fetch(req)
@@ -70,7 +72,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Asset: cache prima, aggiornamento in background
   event.respondWith(
     caches.match(req).then((hit) => {
       const fresh = fetch(req)
