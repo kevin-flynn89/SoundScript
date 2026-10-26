@@ -139,6 +139,38 @@ document.addEventListener("paste", (e) => {
   stat("Negli appunti non c'è un audio utilizzabile.", 0);
 });
 
+/* ===== Lotto C · Gestione scorciatoie da manifest (C1) ===== */
+function handleShortcutAction() {
+  const params = new URLSearchParams(window.location.search);
+  const action = params.get("action");
+  if (!action) return;
+
+  /* Pulisci l'URL così un reload non ri-esegue l'azione */
+  const url = new URL(window.location);
+  url.searchParams.delete("action");
+  window.history.replaceState({}, "", url);
+
+  /* Aspetta che il DOM si stabilizzi (restoreDraft/loadShared potrebbero aver girato) */
+  setTimeout(() => {
+    if (action === "new") {
+      const fileInput = $("#file");
+      if (fileInput) {
+        fileInput.click();
+        announce("Scegli audio aperto.");
+      }
+    } else if (action === "history") {
+      const hist = $("#faqHist");
+      if (hist) {
+        hist.open = true;
+        setTimeout(() => {
+          hist.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 100);
+        announce("Cronologia aperta.");
+      }
+    }
+  }, 400);
+}
+
 /* ===== Mappa portali chiavi API ===== */
 const KEY_PORTALS = {
   openai:    { name: "OpenAI",         url: "https://platform.openai.com/api-keys" },
@@ -1643,6 +1675,7 @@ function render() {
   renderStatusBadges();
   restoreDraft(); /* 1new: ripristina testo/riepilogo dopo un reload */
   loadShared();
+  handleShortcutAction(); /* Lotto C: esegui le scorciatoie dal manifest */
 }
 
 function fullText() {
