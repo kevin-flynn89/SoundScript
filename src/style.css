@@ -74,8 +74,8 @@ button{-webkit-appearance:none;appearance:none;touch-action:manipulation}
 .seg button:focus-visible,
 .dd-btn:focus-visible,
 .dd-item:focus-visible,
-.faq-item summary:focus-visible,
-.faq-sub summary:focus-visible,
+.faq-item > summary:focus-visible,
+.faq-sub > summary:focus-visible,
 .toast-close:focus-visible,
 .toast-btn:focus-visible,
 .preset-chip:focus-visible,
@@ -290,21 +290,22 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
 .faq{display:grid;gap:8px;margin-top:var(--space-lg)}
 .faq-item{position:relative;z-index:1;background:color-mix(in srgb,var(--sc-high) 55%,var(--sc));border-radius:var(--radius-xl);transition:margin .35s var(--ease),background-color .25s,box-shadow .25s}
 .faq-item[open]{margin:14px 0;z-index:10;box-shadow:var(--shadow1)}
-.faq-item summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:14px;padding:18px 22px;font:600 1.05rem/1.3 "Roboto Flex",system-ui,sans-serif;font-variation-settings:"wdth" 104,"opsz" 20;user-select:none;-webkit-tap-highlight-color:transparent}
+.faq-item > summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:14px;padding:18px 22px;font:600 1.05rem/1.3 "Roboto Flex",system-ui,sans-serif;font-variation-settings:"wdth" 104,"opsz" 20;user-select:none;-webkit-tap-highlight-color:transparent}
 .faq-item summary::-webkit-details-marker{display:none}
-.faq-item summary .ttl{flex:1 1 auto;min-width:0}
-.faq-item summary .chev{flex:none;color:var(--on-surface);transition:transform .35s var(--ease)}
-.faq-item[open] summary .chev{transform:rotate(180deg)}
+.faq-item > summary .ttl{flex:1 1 auto;min-width:0}
+/* FIX: selettore figlio diretto, così la rotazione non "cola" sulle frecce annidate */
+.faq-item > summary .chev{flex:none;color:var(--on-surface);transition:transform .35s var(--ease)}
+.faq-item[open] > summary .chev{transform:rotate(180deg)}
 .faq-body{padding:0 22px 22px;animation:dropin .35s var(--ease2) both}
 
 /* ===== DOMANDE ANNIDATE (FAQ) ===== */
 .faq-sub{background:var(--sc-lowest);border:1px solid var(--outline-variant);border-radius:var(--radius-lg);margin-bottom:var(--space-xs);overflow:hidden}
 .faq-sub:last-child{margin-bottom:0}
-.faq-sub summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;padding:14px 18px;font:600 .9375rem/1.4 "Roboto Flex",system-ui,sans-serif;user-select:none;-webkit-tap-highlight-color:transparent}
+.faq-sub > summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;padding:14px 18px;font:600 .9375rem/1.4 "Roboto Flex",system-ui,sans-serif;user-select:none;-webkit-tap-highlight-color:transparent}
 .faq-sub summary::-webkit-details-marker{display:none}
-.faq-sub summary .ttl{flex:1;min-width:0}
-.faq-sub summary .chev{flex:none;color:var(--on-surface-variant);transition:transform .3s var(--ease)}
-.faq-sub[open] summary .chev{transform:rotate(180deg)}
+.faq-sub > summary .ttl{flex:1;min-width:0}
+.faq-sub > summary .chev{flex:none;color:var(--on-surface-variant);transition:transform .3s var(--ease)}
+.faq-sub[open] > summary .chev{transform:rotate(180deg)}
 .faq-sub-body{padding:0 18px 16px;font-size:.875rem;line-height:1.6;color:var(--on-surface-variant)}
 .faq-sub-body b{color:var(--on-surface)}
 .faq-sub-body p{margin:0 0 var(--space-xs)}
@@ -453,7 +454,7 @@ input.search-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0
   .dl-stepcount{margin-left:0}
   textarea{min-height:120px}
   .faq-item{border-radius:var(--radius-lg)}
-  .faq-item summary{padding:14px 16px;gap:10px}
+  .faq-item > summary{padding:14px 16px;gap:10px}
   .faq-body{padding:0 16px 16px}
   .si{width:34px;height:34px}
   .si svg{width:17px;height:17px}
@@ -464,7 +465,7 @@ input.search-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0
   .p-seek{order:10;flex-basis:100%}
   .settings-item.stack{flex-direction:column;align-items:flex-start;gap:8px}
   .settings-item.stack .hbadge-row{justify-content:flex-start}
-  .faq-sub summary{padding:12px 14px}
+  .faq-sub > summary{padding:12px 14px}
   .faq-sub-body{padding:0 14px 14px}
   .toast{left:var(--space-sm);right:var(--space-sm);transform:translateX(0) translateY(140%);width:auto}
   .toast.show{transform:translateX(0) translateY(0)}
