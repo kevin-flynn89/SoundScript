@@ -131,6 +131,10 @@ h1{font:800 clamp(2rem,6vw,2.5rem)/1 "Roboto Flex",system-ui,sans-serif;font-var
 .drop:hover .drop-mark,.drop.over .drop-mark{transform:scale(1.06) rotate(-2deg)}
 .drop strong{display:block;font:700 1.25rem/1.3 "Roboto Flex",system-ui,sans-serif;font-variation-settings:"wdth" 108,"opsz" 28;margin-bottom:6px}
 .drop span{display:block;color:var(--on-surface-variant);font-size:.9375rem}
+/* FIX ACCESSIBILITÀ (audit Lighthouse): contrasto del testo drop zone ≥ 4.5:1 in entrambi i temi */
+.drop span{color:#475569}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .drop span{color:#cbd5e1}}
+:root[data-theme="dark"] .drop span{color:#cbd5e1}
 
 /* ===== CHIPS ===== */
 .chips{display:flex;flex-wrap:wrap;gap:var(--space-xs)}
@@ -293,7 +297,6 @@ input::placeholder{color:color-mix(in srgb,var(--on-surface-variant) 70%,transpa
 .faq-item > summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:14px;padding:18px 22px;font:600 1.05rem/1.3 "Roboto Flex",system-ui,sans-serif;font-variation-settings:"wdth" 104,"opsz" 20;user-select:none;-webkit-tap-highlight-color:transparent}
 .faq-item summary::-webkit-details-marker{display:none}
 .faq-item > summary .ttl{flex:1 1 auto;min-width:0}
-/* FIX: selettore figlio diretto, così la rotazione non "cola" sulle frecce annidate */
 .faq-item > summary .chev{flex:none;color:var(--on-surface);transition:transform .35s var(--ease)}
 .faq-item[open] > summary .chev{transform:rotate(180deg)}
 .faq-body{padding:0 22px 22px;animation:dropin .35s var(--ease2) both}
