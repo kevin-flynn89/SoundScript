@@ -1,12 +1,21 @@
-import { pipeline, env } from "@huggingface/transformers";
 import { PROVIDERS, listModels, classifyModels, apiTranscribe, apiSummarize } from "./providers.js";
 import "./style.css";
 
-env.allowLocalModels = false;
-env.useBrowserCache = true;
-
 const $ = (selector) => document.querySelector(selector);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ===== Lotto D · Transformers.js on-demand (import dinamico) ===== */
+/* Il pacchetto pesante (~190 KB gzip) viene scaricato SOLO quando serve
+   davvero un modello locale: al primo avvio il bundle resta leggero. */
+let TF = null;
+async function getTF() {
+  if (!TF) {
+    TF = await import("@huggingface/transformers");
+    TF.env.allowLocalModels = false;
+    TF.env.useBrowserCache = true;
+  }
+  return TF;
+}
 
 const SHARE_CACHE = "soundscript-share-v1";
 const SETTINGS_KEY = "vtt-settings";
@@ -139,7 +148,7 @@ document.addEventListener("paste", (e) => {
   stat("Negli appunti non c'è un audio utilizzabile.", 0);
 });
 
-/* ===== Lotto C · Gestione scorciatoie da manifest (C1) ===== */
+/* ===== Lotto C · Gestione scorciatoie da manifest ===== */
 function handleShortcutAction() {
   const params = new URLSearchParams(window.location.search);
   const action = params.get("action");
@@ -1034,8 +1043,8 @@ function render() {
   $("#app").innerHTML = `
     <main>
       <div class="hero">
-        <img class="hero-logo hero-logo-light" alt="SoundScript" src="logo-light.svg">
-        <img class="hero-logo hero-logo-dark" alt="SoundScript" src="logo-dark.svg">
+        <img class="hero-logo hero-logo-light" alt="SoundScript" src="logo-light.svg" width="320" height="80">
+        <img class="hero-logo hero-logo-dark" alt="SoundScript" src="logo-dark.svg" width="320" height="80">
         <p class="sub">Condividi un audio da WhatsApp oppure selezionalo qui. L'app prova le chiavi in ordine e chiude con i modelli locali.</p>
       </div>
 
@@ -2084,6 +2093,7 @@ function makeProgressCallback() {
 }
 
 async function createPipeline(task, model, dtype, showProgress) {
+  const { pipeline } = await getTF(); /* chunk Transformers scaricato solo ora, se serve */
   const cb = showProgress ? makeProgressCallback() : undefined;
   try {
     stat("Caricamento modello locale con WebGPU…", 15);
