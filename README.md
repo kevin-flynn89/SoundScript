@@ -1,283 +1,244 @@
-# 🎙️ SoundScript
-
 <div align="center">
 
-**Transcribe voice messages. Summarize them. 100% private.**
+<img src="public/og-banner.svg" alt="SoundScript banner" width="100%">
 
-[🇬🇧 English](#english) · [🇮🇹 Italiano](#italiano)
+# 🎙️ SoundScript
 
-[![Deploy to GitHub Pages](https://github.com/kevin-flynn89/SoundScript/actions/workflows/deploy.yml/badge.svg)](https://github.com/kevin-flynn89/SoundScript/actions/workflows/deploy.yml)
-[![PWA](https://img.shields.io/badge/PWA-Installable-5A67D8?style=flat&logo=googlechrome)](https://kevin-flynn89.github.io/SoundScript/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+**Turn voice notes into text and summaries — entirely in your browser.**
+**Trasforma i vocali in testo e riassunti — interamente nel tuo browser.**
+
+[**🇬🇧 English**](#english) · [**🇮🇹 Italiano**](#italiano)
+
+[Live app](https://kevin-flynn89.github.io/SoundScript/) · [Releases](../../releases) · [Issues](../../issues)
+
+![PWA](https://img.shields.io/badge/PWA-installable-4f46e5) ![Serverless](https://img.shields.io/badge/backend-none%20·%20serverless-success) ![License](https://img.shields.io/badge/license-personal%20project-lightgrey)
 
 </div>
 
 ---
 
 <a id="english"></a>
+## 🇬🇧 English
 
-# 🇬🇧 English
+> [!TIP]
+> **Try it now:** [kevin-flynn89.github.io/SoundScript](https://kevin-flynn89.github.io/SoundScript/) — no signup, no server, no data leaving your device except the API calls you configure yourself.
 
-## What is SoundScript?
+### What is SoundScript?
 
-SoundScript is a **Progressive Web App** that transcribes voice messages (from WhatsApp, Telegram, or any audio file) into text and generates a smart TL;DR summary — all running locally in your browser, with an intelligent API fallback chain.
+SoundScript is a **privacy-first Progressive Web App** that transcribes voice messages (e.g. from WhatsApp) and produces tailored TL;DR summaries. It runs on a **smart provider chain**: your API keys are tried in order with retries and model fallbacks, and if everything fails — or you're offline — **on-device models** (Whisper + Qwen via Transformers.js) take over.
 
-👉 **Live demo:** [kevin-flynn89.github.io/SoundScript](https://kevin-flynn89.github.io/SoundScript/)
+### Screenshots
 
-## ✨ Features
+| Desktop | Mobile |
+|:---:|:---:|
+| <img src="public/screenshots/wide-1280x720.png" alt="SoundScript on desktop" width="100%"> | <img src="public/screenshots/narrow-540x960.png" alt="SoundScript on mobile" width="270"> |
 
-### 🔐 Privacy-first
-- **Zero data leaves your device** when using local models
-- API keys stored only in your browser's localStorage
-- Audio files processed on-device or sent directly to your chosen provider
+### Features
 
-### 🤖 Smart API chain
-Configure multiple providers in priority order. If one runs out of credits or goes down, SoundScript automatically falls through to the next — ending with fully offline local models.
+- 🎙️ **Transcription chain** — OpenAI, Groq, Google Gemini, Mistral, custom OpenAI-compatible endpoints; Anthropic for summaries. Automatic retries, suggested-model fallback, per-key error memory.
+- 🧠 **On-device fallback** — Whisper (tiny/base) + Qwen2.5 run locally via WebGPU/WASM; fully offline once downloaded.
+- 📝 **Custom TL;DR** — length, style (narrative / bullets / actions & deadlines / formal / friendly), language, custom instructions, saved presets; auto-generated for audio over 60 s.
+- ▶️ **Built-in audio player** — play/pause, ±10 s, draggable seek, playback speed 0.75×–2×.
+- 🗂️ **History** — auto-saved (last 20), full-text & date search, per-entry delete, clear-all, JSON export.
+- 📤 **Export** — TXT, Markdown, and PDF (via a branded print sheet).
+- 📲 **Share target** — share audio straight from WhatsApp on Android & desktop; on iOS use the Files workaround (see in-app FAQ).
+- 📱 **Full PWA** — installable with icons, screenshots and home-screen shortcuts ("New transcription", "History"), offline support, silent background updates.
+- 🛟 **QoL** — draft recovery after accidental reloads, paste-audio-from-clipboard, cancel button, API-key tester, manual theme (auto/light/dark), end-of-processing vibration/notifications, status badges.
+- ♿ **Accessible** — visible focus rings, screen-reader live announcements, AA contrast, reduced-motion support.
 
-Supported providers:
-- **OpenAI** (Whisper + GPT)
-- **Groq** (Whisper-large-v3 + Llama)
-- **Google Gemini** (audio-native multimodal)
-- **Anthropic Claude** (TL;DR only — no audio transcription)
-- **Mistral** (Voxtral + Mistral Small)
-- **Custom OpenAI-compatible endpoint**
+### How it works
 
-### 🧠 Local fallback
-- **Whisper** (Tiny or Base) for transcription
-- **Qwen2.5-0.5B-Instruct** for summaries
-- WebGPU when available, WASM fallback
-- Wake Lock keeps the screen on during downloads
-- Progress UI with per-file status
+1. **Input** — drop a file, pick one, paste from clipboard, or share from WhatsApp.
+2. **Transcribe** — providers are tried in your chain order; local models close the chain.
+3. **Summarize** — TL;DR generated with your rules (auto for audio > 60 s).
+4. **Use** — listen with the player, edit, copy, export, or find it later in History.
 
-### 📝 Smart TL;DR
-- Auto-generated for audio longer than 60 seconds
-- Customizable: length (1 sentence / 3 sentences / paragraph), style (narrative, bullet list, actions & deadlines, formal, friendly), language
-- Saved presets for one-click reuse
-- Live prompt preview
+### Supported providers
 
-### 🎧 Built-in audio player
-- Play the transcribed audio right inside the app
-- ±10 seconds skip, draggable seek bar, playback speed (1×, 1.25×, 1.5×, 2×, 0.75×)
-- Icon toggles dynamically between ▶ and ❚❚
+| Provider | Transcription | Summary | Notes |
+|---|:---:|:---:|---|
+| OpenAI | ✅ | ✅ | |
+| Groq | ✅ | ✅ | fast free tier |
+| Google Gemini | ✅ | ✅ | audio inline |
+| Mistral | ✅ | ✅ | Voxtral STT |
+| Anthropic | ❌ | ✅ | chat-only: transcription skips to next in chain |
+| Custom endpoint | ✅ | ✅ | any OpenAI-compatible URL |
+| **Local (offline)** | ✅ | ✅ | Whisper + Qwen, WebGPU/WASM |
 
-### 📚 History with search
-- Last 20 transcriptions saved locally
-- Full-text search across transcript, summary and date
-- Export to JSON
-- One-click reload into the editor
-- Audio not stored (privacy by design)
+### Privacy & data
 
-### 📱 PWA & mobile
-- Installable on iOS and Android
-- Share a voice note from WhatsApp directly to SoundScript
-- Responsive layout: phone, tablet, desktop
-- Dark mode follows the system
-- Offline-capable via service worker
+- **No backend, no database, no analytics.** The site is static GitHub Pages.
+- API keys, settings and history live **only in your browser** (localStorage/sessionStorage).
+- Audio files are kept **in memory for the current session only** (player); they are never stored in history.
+- Exports and printing happen **entirely client-side**.
 
-### 🔄 Silent updates
-- Toast notification when a new build is deployed
-- "Update now" / "Later" choice
-- Manual check in the Info section
-- Version stamp derived from the build date
+### Install as an app
 
-### 🎨 Design
-- Custom SVG logo (light + dark variants)
-- Organic blob shapes (cookie, clover, sun)
-- Indigo → cyan gradient signature
-- Roboto Flex variable font
-- Smooth animations, reduced-motion aware
+- **Android / Desktop Chrome-Edge:** install prompt with screenshots; long-press the icon for shortcuts.
+- **iOS / iPadOS:** Safari → Share → *Add to Home Screen*.
 
-## ️ Tech stack
+> [!NOTE]
+> iOS does not allow web apps in WhatsApp's share sheet (system limitation). Workaround: in WhatsApp long-press the audio → Share → **Save to Files**, then open SoundScript → **Choose audio**.
 
-- **Vite** — build tool
-- **Vanilla JS** (ES modules) — no framework overhead
-- **@huggingface/transformers** — local Whisper & Qwen
-- **GitHub Pages + GitHub Actions** — zero-cost hosting, auto-deploy on push to `main`
-- **Service Worker** — cache, share target, update detection
+### For developers
 
-## 🚀 Deploy your own
+**Stack:** Vite · vanilla ES modules · [@huggingface/transformers](https://github.com/huggingface/transformers.js) · hand-rolled service worker.
 
-1. Fork this repository
-2. Enable **GitHub Pages** → Source: **GitHub Actions**
-3. Push to `main` — the workflow builds and deploys automatically
-4. Open `https://<your-username>.github.io/SoundScript/`
+    SoundScript/
+    ├─ .github/workflows/deploy.yml   # Pages deploy + PNG asset generation (rsvg-convert)
+    ├─ index.html                     # meta OG/Twitter, self-hosted font preload
+    ├─ public/
+    │  ├─ manifest.json               # icons, shortcuts, screenshots, share_target
+    │  ├─ sw.js                       # offline cache, share-target POST handler
+    │  ├─ share-target.html
+    │  ├─ fonts/roboto-flex.woff2     # self-hosted variable font
+    │  ├─ screenshots/                # real store screenshots (replace placeholders)
+    │  └─ *.svg                       # icons, logos, OG banner, placeholders
+    └─ src/
+       ├─ main.js                     # UI, chain orchestration, player, history, exports
+       ├─ providers.js                # API adapters (OpenAI/Groq/Google/Mistral/Anthropic)
+       └─ style.css                   # design system, themes, print sheet
 
-The workflow also generates PNG icons (180 / 192 / 512 / maskable 512) from `icon-light.svg` at build time, so iOS and Android get proper install icons without you having to create them manually.
+    npm install
+    npm run dev      # local dev server
+    npm run build    # outputs dist/
 
-## ⚙️ Configure providers
+Deploy: push to `main` → GitHub Actions builds, rasterizes SVG assets (icons, OG banner, shortcut icons; screenshot placeholders only if real PNGs are missing) and publishes to Pages.
 
-1. Open the **API keys & priority** section
-2. Pick a provider from the dropdown — a link to the official key portal appears automatically
-3. Paste your API key and click **Save API key**
-4. Add more providers and reorder them by drag & drop
-5. Click **Save provider order** to activate the chain
+### Performance & quality highlights
 
-The local fallback is always appended at the end.
+- Core bundle ~24 KB gzip-critical path; the ML library is a **separate chunk loaded on demand**.
+- Self-hosted variable font with `preload` + `font-display: optional` → **zero layout shift**.
+- Service worker: network-first navigations, cache-first assets, silent self-update.
+- Lighthouse-optimized: AA contrast, focus management, live regions, semantic markup.
 
-##  Project structure
+### Troubleshooting
 
-SoundScript/
-├── .github/workflows/deploy.yml # CI/CD: build + generazione PNG + deploy
-├── index.html # punto di ingresso
-├── vite.config.js # config Vite + timbro build SW
-├── public/
-│ ├── manifest.json # manifest PWA + share target
-│ ├── sw.js # service worker
-│ ├── share-target.html # gestore condivisione WhatsApp
-│ ├── icon-light.svg # icona PWA (chiara)
-│ ├── icon-dark.svg # icona PWA (scura)
-│ ├── icon-dark-transparent.svg # favicon
-│ ├── logo-light.svg # logo hero (chiaro)
-│ └── logo-dark.svg # logo hero (scuro)
-└── src/
-├── main.js # logica dell'app
-├── style.css # design system
-└── providers.js # integrazioni API
+| Symptom | Cause / fix |
+|---|---|
+| `401/403` on a key | Key invalid or revoked — use the **Test** button before saving |
+| `429` | Rate limit — the app retries once, then moves to the next provider |
+| No WhatsApp share on iPhone | iOS limitation — use the Files workaround above |
+| Local models slow first time | One-time download; use *Download local models now* on Wi-Fi |
 
+### Credits & license
 
-##  Contributing
-
-Pull requests welcome! A few guidelines:
-- Keep the app dependency-free (no new npm packages unless strictly necessary)
-- Match the existing design tokens (`--primary`, `--radius-*`, etc.)
-- Test on mobile before opening a PR
-- Write commit messages in English
-
-## 📄 License
-
-[MIT](LICENSE) — do whatever you want with it.
+Built with [Transformers.js](https://huggingface.co/docs/transformers.js), [Roboto Flex](https://fonts.google.com/specimen/Roboto+Flex) and the public APIs of the providers listed above.
+Personal project — all rights reserved unless a LICENSE file states otherwise.
 
 ---
 
 <a id="italiano"></a>
+## 🇮🇹 Italiano
 
-# 🇮🇹 Italiano
+> [!TIP]
+> **Provala subito:** [kevin-flynn89.github.io/SoundScript](https://kevin-flynn89.github.io/SoundScript/) — niente registrazione, niente server, niente dati che lasciano il dispositivo tranne le chiamate API che configuri tu.
 
-## Cos'è SoundScript?
+### Cos'è SoundScript?
 
-SoundScript è una **Progressive Web App** che trascrive messaggi vocali (da WhatsApp, Telegram o qualsiasi file audio) in testo e ne genera un riassunto TL;DR intelligente — il tutto eseguito localmente nel tuo browser, con una catena di fallback API intelligente.
+SoundScript è una **Progressive Web App privacy-first** che trascrive i messaggi vocali (es. da WhatsApp) e genera riassunti TL;DR su misura. Funziona con una **catena intelligente di provider**: le tue chiavi API vengono provate in ordine con retry e fallback di modello; se tutto fallisce — o sei offline — subentrano i **modelli on-device** (Whisper + Qwen via Transformers.js).
 
-👉 **Demo live:** [kevin-flynn89.github.io/SoundScript](https://kevin-flynn89.github.io/SoundScript/)
+### Catture schermo
 
-## ✨ Funzionalità
+| Desktop | Mobile |
+|:---:|:---:|
+| <img src="public/screenshots/wide-1280x720.png" alt="SoundScript su desktop" width="100%"> | <img src="public/screenshots/narrow-540x960.png" alt="SoundScript su mobile" width="270"> |
 
-### 🔐 Privacy al primo posto
-- **Nessun dato lascia il tuo dispositivo** quando usi i modelli locali
-- Chiavi API salvate solo nel localStorage del browser
-- File audio elaborati sul dispositivo o inviati direttamente al provider scelto
+### Funzionalità
 
-### 🤖 Catena API intelligente
-Configura più provider in ordine di priorità. Se uno esaurisce i crediti o va offline, SoundScript passa automaticamente al successivo — fino ai modelli locali completamente offline.
+- 🎙️ **Catena di trascrizione** — OpenAI, Groq, Google Gemini, Mistral, endpoint personalizzati compatibili OpenAI; Anthropic per i riassunti. Retry automatici, fallback sul modello suggerito, memoria degli errori per chiave.
+- 🧠 **Fallback on-device** — Whisper (tiny/base) + Qwen2.5 girano in locale via WebGPU/WASM; offline completo dopo il primo download.
+- 📝 **TL;DR su misura** — lunghezza, stile (narrativo / elenco / azioni e scadenze / formale / amichevole), lingua, istruzioni personalizzate, preset salvati; automatico sopra i 60 s.
+- ▶️ **Player integrato** — play/pausa, ±10 s, seek trascinabile, velocità 0,75×–2×.
+- 🗂️ **Cronologia** — salvataggio automatico (ultime 20 voci), ricerca su testo e data, eliminazione singola, svuotamento, export JSON.
+- 📤 **Export** — TXT, Markdown e PDF (foglio di stampa brandizzato).
+- 📲 **Share target** — condividi l'audio da WhatsApp su Android e desktop; su iOS c'è il percorso Files (vedi FAQ in app).
+- 📱 **PWA completa** — installabile con icone, screenshot e scorciatoie home ("Nuova trascrizione", "Cronologia"), offline, aggiornamenti silenziosi.
+- 🛟 **Qualità della vita** — recupero bozza dopo reload accidentale, incolla audio dagli appunti, pulsante Annulla, test chiave API, tema manuale (auto/chiaro/scuro), vibrazione/notifiche a fine elaborazione, badge di stato.
+- ♿ **Accessibile** — focus ring visibili, annunci per screen reader, contrasto AA, rispetto di reduced-motion.
 
-Provider supportati:
-- **OpenAI** (Whisper + GPT)
-- **Groq** (Whisper-large-v3 + Llama)
-- **Google Gemini** (multimodale nativo audio)
-- **Anthropic Claude** (solo TL;DR — nessuna trascrizione audio)
-- **Mistral** (Voxtral + Mistral Small)
-- **Endpoint personalizzato compatibile OpenAI**
+### Come funziona
 
-### 🧠 Fallback locale
-- **Whisper** (Tiny o Base) per la trascrizione
-- **Qwen2.5-0.5B-Instruct** per i riassunti
-- WebGPU quando disponibile, fallback WASM
-- Wake Lock mantiene lo schermo acceso durante i download
-- UI di progresso con stato per ogni file
+1. **Ingresso** — trascina un file, sceglilo, incollalo dagli appunti o condividilo da WhatsApp.
+2. **Trascrizione** — i provider vengono provati nell'ordine della tua catena; i modelli locali la chiudono.
+3. **Riepilogo** — TL;DR generato con le tue regole (automatico sopra i 60 s).
+4. **Uso** — riascolta col player, modifica, copia, esporta o ritrova tutto in Cronologia.
 
-### 📝 TL;DR intelligente
-- Generato automaticamente per audio oltre i 60 secondi
-- Personalizzabile: lunghezza (1 frase / 3 frasi / paragrafo), stile (narrativo, elenco puntato, azioni e scadenze, formale, amichevole), lingua
-- Preset salvati per riuso con un click
-- Anteprima live del prompt inviato al modello
+### Provider supportati
 
-### 🎧 Player audio integrato
-- Riproduci l'audio trascritto direttamente nell'app
-- Salto ±10 secondi, barra di avanzamento trascinabile, velocità (1×, 1.25×, 1.5×, 2×, 0.75×)
-- Icona che cambia dinamicamente tra ▶ e ❚❚
+| Provider | Trascrizione | Riepilogo | Note |
+|---|:---:|:---:|---|
+| OpenAI | ✅ | ✅ | |
+| Groq | ✅ | ✅ | piano gratuito veloce |
+| Google Gemini | ✅ | ✅ | audio inline |
+| Mistral | ✅ | ✅ | STT Voxtral |
+| Anthropic | ❌ | ✅ | solo chat: la trascrizione passa al provider successivo |
+| Endpoint custom | ✅ | ✅ | qualsiasi URL compatibile OpenAI |
+| **Locale (offline)** | ✅ | ✅ | Whisper + Qwen, WebGPU/WASM |
 
-### 📚 Cronologia con ricerca
-- Ultime 20 trascrizioni salvate in locale
-- Ricerca full-text su trascrizione, riassunto e data
-- Esportazione in JSON
-- Ricarica con un click nell'editor
-- Audio non conservato (privacy by design)
+### Privacy e dati
 
-### 📱 PWA e mobile
-- Installabile su iOS e Android
-- Condividi un vocale da WhatsApp direttamente a SoundScript
-- Layout responsive: telefono, tablet, desktop
-- Dark mode che segue il sistema
-- Funzionamento offline tramite service worker
+- **Nessun backend, nessun database, nessuna analytics.** Il sito è GitHub Pages statico.
+- Chiavi API, impostazioni e cronologia vivono **solo nel tuo browser** (localStorage/sessionStorage).
+- I file audio restano **in memoria per la sola sessione corrente** (player); non finiscono mai nella cronologia.
+- Export e stampa avvengono **interamente lato client**.
 
-### 🔄 Aggiornamenti silenziosi
-- Notifica toast quando viene deployata una nuova build
-- Scelta "Aggiorna ora" / "Più tardi"
-- Controllo manuale nella sezione Info
-- Versione generata dalla data di build
+### Installa come app
 
-### 🎨 Design
-- Logo SVG personalizzato (varianti chiara e scura)
-- Forme organiche (biscotto, trifoglio, sole)
-- Gradiente firma indaco → ciano
-- Font variabile Roboto Flex
-- Animazioni fluide, rispetto di `prefers-reduced-motion`
+- **Android / Desktop Chrome-Edge:** prompt di installazione con screenshot; pressione lunga sull'icona per le scorciatoie.
+- **iOS / iPadOS:** Safari → Condividi → *Aggiungi a Home*.
 
-## 🛠️ Stack tecnologico
+> [!NOTE]
+> iOS non consente alle web app di comparire nel menu Condividi di WhatsApp (limite di sistema). Alternativa: in WhatsApp tieni premuto l'audio → Condividi → **Salva su File**, poi apri SoundScript → **Scegli audio**.
 
-- **Vite** — strumento di build
-- **Vanilla JS** (moduli ES) — nessun framework
-- **@huggingface/transformers** — Whisper e Qwen locali
-- **GitHub Pages + GitHub Actions** — hosting gratuito, deploy automatico su push a `main`
-- **Service Worker** — cache, share target, rilevamento aggiornamenti
+### Per sviluppatori
 
-## 🚀 Deploy del tuo
+**Stack:** Vite · vanilla ES modules · [@huggingface/transformers](https://github.com/huggingface/transformers.js) · service worker artigianale.
 
-1. Forka questo repository
-2. Abilita **GitHub Pages** → Source: **GitHub Actions**
-3. Push su `main` — il workflow builda e deploya in automatico
-4. Apri `https://<tuo-username>.github.io/SoundScript/`
+    SoundScript/
+    ├─ .github/workflows/deploy.yml   # deploy Pages + generazione PNG (rsvg-convert)
+    ├─ index.html                     # meta OG/Twitter, preload font self-hosted
+    ├─ public/
+    │  ├─ manifest.json               # icone, scorciatoie, screenshot, share_target
+    │  ├─ sw.js                       # cache offline, gestore POST share-target
+    │  ├─ share-target.html
+    │  ├─ fonts/roboto-flex.woff2     # font variabile self-hosted
+    │  ├─ screenshots/                # screenshot reali (sostituiscono i segnaposto)
+    │  └─ *.svg                       # icone, loghi, banner OG, segnaposto
+    └─ src/
+       ├─ main.js                     # UI, orchestrazione catena, player, cronologia, export
+       ├─ providers.js                # adapter API (OpenAI/Groq/Google/Mistral/Anthropic)
+       └─ style.css                   # design system, temi, foglio di stampa
 
-Il workflow genera anche le icone PNG (180 / 192 / 512 / maskable 512) da `icon-light.svg` al momento della build, così iOS e Android ricevono icone di installazione corrette senza che tu debba crearle a mano.
+    npm install
+    npm run dev      # server di sviluppo locale
+    npm run build    # genera dist/
 
-## ⚙️ Configurazione provider
+Deploy: push su `main` → GitHub Actions compila, rasterizza gli asset SVG (icone, banner OG, icone scorciatoie; segnaposto screenshot solo se i PNG reali mancano) e pubblica su Pages.
 
-1. Apri la sezione **Chiavi API e priorità**
-2. Scegli un provider dal menu a tendina — appare automaticamente il link al portale ufficiale per ottenere la chiave
-3. Incolla la tua API key e clicca **Salva API key**
-4. Aggiungi altri provider e riordinali con drag & drop
-5. Clicca **Salva ordine provider** per attivare la catena
+### Punti di forza prestazionali
 
-Il fallback locale viene sempre aggiunto in fondo.
+- Bundle core leggero: la libreria ML è un **chunk separato caricato on demand**.
+- Font variabile self-hosted con `preload` + `font-display: optional` → **zero layout shift**.
+- Service worker: navigazioni network-first, asset cache-first, auto-aggiornamento silenzioso.
+- Ottimizzato Lighthouse: contrasto AA, gestione focus, live region, markup semantico.
 
-## 📂 Struttura del progetto
+### Risoluzione problemi
 
-SoundScript/
-├── .github/workflows/deploy.yml # CI/CD: build + generazione PNG + deploy
-├── index.html # punto di ingresso
-├── vite.config.js # config Vite + timbro build SW
-── public/
-│ ├── manifest.json # manifest PWA + share target
-│ ├── sw.js # service worker
-│ ├── share-target.html # gestore condivisione WhatsApp
-│ ├── icon-light.svg # icona PWA (chiara)
-│ ├── icon-dark.svg # icona PWA (scura)
-│ ├── icon-dark-transparent.svg # favicon
-│ ├── logo-light.svg # logo hero (chiaro)
-│ └── logo-dark.svg # logo hero (scuro)
-└── src/
-├── main.js # logica dell'app
-├── style.css # design system
-└── providers.js # integrazioni API
+| Sintomo | Causa / soluzione |
+|---|---|
+| `401/403` su una chiave | Chiave non valida o revocata — usa il pulsante **Testa** prima di salvare |
+| `429` | Limite di frequenza — l'app riprova una volta, poi passa al provider successivo |
+| Niente condivisione WhatsApp su iPhone | Limite iOS — usa il percorso Files qui sopra |
+| Modelli locali lenti la prima volta | Download una tantum; usa *Scarica modelli locali ora* sotto Wi-Fi |
 
+### Crediti e licenza
 
-## 🤝 Contributi
+Realizzato con [Transformers.js](https://huggingface.co/docs/transformers.js), [Roboto Flex](https://fonts.google.com/specimen/Roboto+Flex) e le API pubbliche dei provider elencati.
+Progetto personale — tutti i diritti riservati, salvo diverso file LICENSE.
 
-Pull request benvenute! Alcune linee guida:
-- Mantieni l'app senza dipendenze (niente nuovi pacchetti npm se non strettamente necessari)
-- Rispetta i token di design esistenti (`--primary`, `--radius-*`, ecc.)
-- Testa su mobile prima di aprire una PR
-- Scrivi i messaggi di commit in inglese
+<div align="center">
 
-## 📄 Licenza
+**[⬆ back to top / torna su](#-soundscript)**
 
-[MIT](LICENSE) — fanne quello che vuoi.
+</div>
