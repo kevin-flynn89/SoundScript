@@ -21,8 +21,7 @@ self.addEventListener("install", (event) => {
       .then((cache) => cache.addAll(CORE_ASSETS))
       .catch(() => {})
   );
-  /* Aggiornamento SILENZIOSO: il nuovo SW si attiva subito,
-     senza aspettare la conferma dell'utente e senza toast bloccanti */
+  /* Aggiornamento SILENZIOSO: il nuovo SW si attiva subito */
   self.skipWaiting();
 });
 
@@ -64,16 +63,31 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  /* FIX SCORCIATOIE: manifest SEMPRE dalla rete (fallback cache solo offline).
+     Così le installazioni esistenti ricevono le shortcuts senza reinstallare. */
+  if (url.pathname.endsWith("/manifest.json")) {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CORE_CACHE).then((c) => c.put(req, copy));
+          return res;
+        })
+        .catch(() => caches.match(req))
+    );
+    return;
+  }
+
   /* Asset: cache prima, aggiornamento in background */
   event.respondWith(
     caches.match(req).then((hit) => {
       const fresh = fetch(req)
         .then((res) => {
-          if (res && res.status === 200) {
-            const copy = res.clone();
-            caches.open(CORE_CACHE).then((c) => c.put(req, copy));
-          }
-          return res;
+        if (res && res.status === 200) {
+          const copy = res.clone();
+          caches.open(CORE_CACHE).then((c) => c.put(req, copy));
+        }
+        return res;
         })
         .catch(() => hit);
       return hit || fresh;
