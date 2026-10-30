@@ -5,8 +5,6 @@ const $ = (selector) => document.querySelector(selector);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* ===== Lotto D · Transformers.js on-demand (import dinamico) ===== */
-/* Il pacchetto pesante (~190 KB gzip) viene scaricato SOLO quando serve
-   davvero un modello locale: al primo avvio il bundle resta leggero. */
 let TF = null;
 async function getTF() {
   if (!TF) {
@@ -137,7 +135,7 @@ document.addEventListener("paste", (e) => {
       e.preventDefault();
       const drop = $("#drop");
       if (drop) {
-        drop.classList.add("over"); /* lampeggio: riuso dello stile drag-over */
+        drop.classList.add("over");
         setTimeout(() => drop.classList.remove("over"), 700);
       }
       announce("Audio ricevuto dagli appunti.");
@@ -154,12 +152,10 @@ function handleShortcutAction() {
   const action = params.get("action");
   if (!action) return;
 
-  /* Pulisci l'URL così un reload non ri-esegue l'azione */
   const url = new URL(window.location);
   url.searchParams.delete("action");
   window.history.replaceState({}, "", url);
 
-  /* Aspetta che il DOM si stabilizzi (restoreDraft/loadShared potrebbero aver girato) */
   setTimeout(() => {
     if (action === "new") {
       const fileInput = $("#file");
@@ -341,6 +337,9 @@ function fmtHistDate(iso) {
     return new Date(iso).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
   } catch (e) { return iso; }
 }
+function nowLabel() {
+  return new Date().toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
 
 /* ===== Regole TL;DR ===== */
 const TLR_LEN = {
@@ -508,6 +507,118 @@ function attachSummaryToLatest(summary) {
   } catch (e) {}
 }
 
+/* ===== v1.1 · Export cronologia multi-formato ===== */
+function buildHistoryMD(list) {
+  let s = "# SoundScript — Cronologia\n\nGenerato: " + nowLabel() + " · " + list.length + (list.length === 1 ? " voce" : " voci") + "\n";
+  list.forEach((h) => {
+    s += "\n---\n\n## " + fmtHistDate(h.date) + " · " + (h.engine || "—") +
+      (h.dur != null && h.dur !== "" ? " · " + fmtDur(Number(h.dur)) : "") + "\n\n**Trascrizione**\n\n" + (h.transcript || "") + "\n";
+    if (h.summary) s += "\n**TL;DR**\n\n" + h.summary + "\n";
+  });
+  return s;
+}
+function buildHistoryTXT(list) {
+  let s = "SOUNDSCRIPT — CRONOLOGIA\nGenerato: " + nowLabel() + " · " + list.length + (list.length === 1 ? " voce" : " voci") + "\n";
+  list.forEach((h) => {
+    s += "\n[" + fmtHistDate(h.date) + "] " + (h.engine || "—") + "\nTRASCRIZIONE:\n" + (h.transcript || "") + "\n";
+    if (h.summary) s += "TL;DR:\n" + h.summary + "\n";
+    s += "================================\n";
+  });
+  return s;
+}
+function exportHistoryFormat(kind) {
+  const items = loadHistory();
+  if (!items.length) { stat("Cronologia vuota: niente da esportare.", 0); return; }
+  const name = "soundscript-cronologia-" + fileStamp();
+  if (kind === "json") { downloadFile(name + ".json", JSON.stringify(items, null, 2), "application/json"); announce("Cronologia esportata in JSON."); }
+  if (kind === "md") { downloadFile(name + ".md", buildHistoryMD(items), "text/markdown;charset=utf-8"); announce("Cronologia esportata in Markdown."); }
+  if (kind === "txt") { downloadFile(name + ".txt", buildHistoryTXT(items), "text/plain;charset=utf-8"); announce("Cronologia esportata in testo."); }
+  stat("Cronologia esportata.", 100);
+}
+function exportSingleEntry(h) {
+  downloadFile("soundscript-voce-" + fileStamp() + ".md", buildHistoryMD([h]), "text/markdown;charset=utf-8");
+  stat("Voce esportata in Markdown.", 100);
+  announce("Voce esportata in Markdown.");
+}
+
+/* ===== v1.1 · Import cronologia da JSON ===== */
+async function importHistoryFile(file) {
+  try {
+    const data = JSON.parse(await file.text());
+    if (!Array.isArray(data)) throw new Error("struttura");
+    const items = loadHistory();
+    let added = 0, dup = 0;
+    data.forEach((v) => {
+      if (!v || typeof v.transcript !== "string" || !v.date) return;
+      if (items.some((x) => x.date === v.date && x.transcript === v.transcript)) { dup++; return; }
+      items.push({
+        date: v.date,
+        transcript: v.transcript,
+        summary: typeof v.summary === "string" ? v.summary : "",
+        engine: typeof v.engine === "string" ? v.engine : "",
+        dur: (v.dur != null && v.dur !== "") ? Number(v.dur) : null
+      });
+      added++;
+    });
+    items.sort((a, b) => new Date(b.date) - new Date(a.date));
+    const over = Math.max(0, items.length - 20);
+    saveHistoryList(items);
+    renderHistory();
+    const msg = "Importate " + added + " voci · " + dup + " duplicati scartati" + (over ? " · " + over + " oltre il limite (20)" : "");
+    stat(msg + ".", 100);
+    announce(msg);
+  } catch (e) {
+    stat("Import non riuscito: il file non è un backup cronologia valido.", 0);
+    announce("Import cronologia non riuscito.");
+  }
+}
+
+/* ===== v1.1 · Backup e ripristino impostazioni ===== */
+function buildSettingsBackup(full) {
+  const s = loadSettings();
+  const out = {
+    app: "SoundScript",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    theme: s.theme || "auto",
+    notify: !!s.notify,
+    tldr: s.tldr || {},
+    tldrPresets: Array.isArray(s.tldrPresets) ? s.tldrPresets : [],
+    localModel: s.localModel || "",
+    lastProvider: s.lastProvider || "openai"
+  };
+  if (full) out.keys = s.keys;
+  else out.keysOmitted = true;
+  return out;
+}
+async function importSettingsFile(file) {
+  try {
+    const d = JSON.parse(await file.text());
+    if (d.app !== "SoundScript" || d.version !== 1) throw new Error("formato");
+    const patch = {};
+    if (d.theme) patch.theme = d.theme;
+    if (typeof d.notify === "boolean") patch.notify = d.notify;
+    if (d.tldr) patch.tldr = d.tldr;
+    if (Array.isArray(d.tldrPresets)) patch.tldrPresets = d.tldrPresets;
+    if (d.localModel) patch.localModel = d.localModel;
+    if (d.lastProvider) patch.lastProvider = d.lastProvider;
+    let keysMsg = "";
+    if (Array.isArray(d.keys) && d.keys.length) {
+      if (confirm("Il backup contiene " + d.keys.length + " chiavi API: importare anche la catena provider completa?\n\nOK = importa tutto · Annulla = solo le altre impostazioni")) {
+        patch.keys = d.keys;
+        keysMsg = " Catena e chiavi incluse.";
+      }
+    }
+    saveSettings(patch);
+    stat("Impostazioni importate." + keysMsg + " Ricarico l'app…", 100);
+    announce("Impostazioni importate. Ricaricamento in corso.");
+    setTimeout(() => location.reload(), 900);
+  } catch (e) {
+    stat("Import non riuscito: il file non è un backup impostazioni valido.", 0);
+    announce("Import impostazioni non riuscito.");
+  }
+}
+
 /* ===== Player audio: logica ===== */
 function setPlayingUI(playing) {
   const ip = $("#icoPlay"), ipa = $("#icoPause"), pl = $("#player");
@@ -630,7 +741,7 @@ function resetSession() {
   const regen = $("#regen"); if (regen) regen.textContent = "Genera TL;DR";
   const all = $("#all"); if (all) all.disabled = true;
   const bar = $("#bar"); if (bar) bar.style.width = "0%";
-  clearDraft(); /* niente più bozza dopo il reset */
+  clearDraft();
   stat("Pronto.", 0);
   announce("Campi svuotati. Pronto per un nuovo audio.");
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -702,11 +813,20 @@ function ensurePrintView() {
   }
   return pv;
 }
+
+/* ===== Chiusura menu popover (tutti) ===== */
 function closeExportMenu() {
   const m = $("#exportMenu");
   if (m) m.hidden = true;
   const b = $("#exportBtn");
   if (b) b.setAttribute("aria-expanded", "false");
+}
+function closeAllMenus() {
+  closeExportMenu();
+  const hm = $("#histExpMenu"); if (hm) hm.hidden = true;
+  const hb = $("#histExpBtn"); if (hb) hb.setAttribute("aria-expanded", "false");
+  const sm = $("#setExpMenu"); if (sm) sm.hidden = true;
+  const sb = $("#setExpBtn"); if (sb) sb.setAttribute("aria-expanded", "false");
 }
 
 /* ===== Ultimi errori ===== */
@@ -827,6 +947,7 @@ const KEY_SVG = `<svg viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="3.5"/><p
 const CHIP_SVG = `<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><rect x="10.5" y="10.5" width="3" height="3"/><path d="M10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M2 14h3M19 10h3M19 14h3"/></svg>`;
 const FAQ_SVG = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .2c0 1.8-2.5 2-2.5 3.3"/><circle cx="12" cy="17" r=".5"/></svg>`;
 const REFRESH_SVG = `<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>`;
+const DL_SVG = `<svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>`;
 const DROP_MARK_SVG = `<svg class="drop-mark" viewBox="0 0 80 64" aria-hidden="true">
   <defs><linearGradient id="dz-mark" x1="0" y1="0" x2="1" y2="1">
     <stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#06b6d4"/>
@@ -848,9 +969,9 @@ function closeAllDD() {
     const b = d.querySelector(".dd-btn"); if (b) b.setAttribute("aria-expanded", "false");
   });
 }
-document.addEventListener("click", () => { closeAllDD(); closeExportMenu(); });
+document.addEventListener("click", () => { closeAllDD(); closeAllMenus(); });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { closeAllDD(); closeExportMenu(); }
+  if (e.key === "Escape") { closeAllDD(); closeAllMenus(); }
 });
 
 function makeDropdown(host, opts) {
@@ -947,6 +1068,7 @@ function renderHistory() {
         <div class="hist-preview"></div>
       </div>
       <div class="hist-actions">
+        <button class="icon-btn expone" title="Esporta questa voce (.md)" aria-label="Esporta questa voce in Markdown">${DL_SVG}</button>
         <button class="icon-btn del" title="Elimina" aria-label="Elimina voce">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>
         </button>
@@ -958,6 +1080,10 @@ function renderHistory() {
     else durB.remove();
     row.querySelector(".hist-preview").textContent = h.transcript || "";
     row.onclick = () => loadHistoryEntry(h);
+    row.querySelector(".expone").onclick = (e) => {
+      e.stopPropagation();
+      exportSingleEntry(h);
+    };
     row.querySelector(".del").onclick = (e) => {
       e.stopPropagation();
       items.splice(idx, 1);
@@ -1007,25 +1133,10 @@ function loadHistoryEntry(h) {
   $("#chipLlm").hidden = true;
   $("#regen").textContent = "Genera TL;DR";
   $("#all").disabled = false;
-  writeDraft(); /* la bozza segue ciò che stai vedendo */
+  writeDraft();
   stat("Voce caricata dalla cronologia.", 100);
   announce("Voce caricata dalla cronologia.");
   $("#resultStt").scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-function exportHistory() {
-  const items = loadHistory();
-  if (!items.length) { stat("Cronologia vuota: niente da esportare.", 0); return; }
-  const blob = new Blob([JSON.stringify(items, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "soundscript-cronologia.json";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  stat("Cronologia esportata in JSON.", 100);
-  announce("Cronologia esportata in JSON.");
 }
 
 function clearHistory() {
@@ -1223,13 +1334,32 @@ function render() {
             <div class="empty" id="histEmpty" hidden><span class="em">🗂️</span>Nessuna trascrizione salvata, oppure nessun risultato per la ricerca.</div>
             <div class="hist-footer">
               <button class="btn ghostline" id="histMore">Mostra tutte</button>
-              <button class="btn" id="histExport">Esporta JSON</button>
+              <div class="export-wrap">
+                <button class="btn" id="histExpBtn" aria-haspopup="menu" aria-expanded="false">⤓ Esporta</button>
+                <div class="export-menu" id="histExpMenu" hidden role="menu">
+                  <button class="xm-item" id="histExpJson" role="menuitem">
+                    <span class="xm-ico txt">{ }</span>
+                    <span><span class="xm-t">JSON</span><br><span class="xm-d">Backup completo, re-importabile</span></span>
+                  </button>
+                  <button class="xm-item" id="histExpMd" role="menuitem">
+                    <span class="xm-ico md">Ⓜ️</span>
+                    <span><span class="xm-t">Markdown</span><br><span class="xm-d">Documento unico leggibile</span></span>
+                  </button>
+                  <button class="xm-item" id="histExpTxt" role="menuitem">
+                    <span class="xm-ico pdf">📄</span>
+                    <span><span class="xm-t">Testo</span><br><span class="xm-d">Versione lineare semplice</span></span>
+                  </button>
+                </div>
+              </div>
+              <button class="btn ghostline" id="histImpBtn">⤒ Importa JSON</button>
+              <input type="file" id="histImpFile" accept=".json,application/json" hidden>
               <button class="btn danger" id="histClear">Svuota cronologia</button>
               <span class="hist-count" id="histShown"></span>
             </div>
             <p class="muted" style="margin-top:var(--space-sm)">
               Le elaborazioni completate si salvano da sole su questo dispositivo (massimo 20 voci).
               L'audio non viene conservato: il player è disponibile solo per il file appena elaborato.
+              Usa Esporta/Importa JSON per trasferire la cronologia tra dispositivi.
             </p>
           </div>
         </details>
@@ -1390,6 +1520,29 @@ function render() {
                 <span class="track"></span>
               </label>
             </div>
+            <div class="settings-item stack">
+              <div>
+                <div class="settings-item-title">Backup impostazioni</div>
+                <div class="settings-item-desc">Tema, notifiche, preset e catena provider. Le chiavi API solo nel backup completo.</div>
+              </div>
+              <div class="actions" style="margin:0;justify-content:flex-end">
+                <div class="export-wrap">
+                  <button class="btn" id="setExpBtn" aria-haspopup="menu" aria-expanded="false">⤓ Esporta</button>
+                  <div class="export-menu" id="setExpMenu" hidden role="menu">
+                    <button class="xm-item" id="setExpSafe" role="menuitem">
+                      <span class="xm-ico txt">🛡️</span>
+                      <span><span class="xm-t">Sicuro · senza chiavi</span><br><span class="xm-d">Condivisibile senza rischi</span></span>
+                    </button>
+                    <button class="xm-item" id="setExpFull" role="menuitem">
+                      <span class="xm-ico md">🔑</span>
+                      <span><span class="xm-t">Completo · con chiavi</span><br><span class="xm-d">Per migrare su un tuo dispositivo — non condividerlo</span></span>
+                    </button>
+                  </div>
+                </div>
+                <button class="btn ghostline" id="setImpBtn">⤒ Importa</button>
+                <input type="file" id="setImpFile" accept=".json,application/json" hidden>
+              </div>
+            </div>
             <div class="settings-item">
               <div>
                 <div class="settings-item-title">Aggiornamenti</div>
@@ -1447,39 +1600,91 @@ function render() {
   /* Cronologia wiring */
   const hs = $("#histSearch"); if (hs) hs.oninput = () => renderHistory();
   const hm = $("#histMore"); if (hm) hm.onclick = () => { histShowAll = !histShowAll; renderHistory(); };
-  const he = $("#histExport"); if (he) he.onclick = exportHistory;
   const hc = $("#histClear"); if (hc) hc.onclick = clearHistory;
+
+  /* v1.1 · menu export cronologia */
+  const histExpBtn = $("#histExpBtn");
+  if (histExpBtn) histExpBtn.onclick = (e) => {
+    e.stopPropagation();
+    const was = !$("#histExpMenu").hidden;
+    closeAllMenus();
+    if (!was) { $("#histExpMenu").hidden = false; histExpBtn.setAttribute("aria-expanded", "true"); }
+  };
+  const hj = $("#histExpJson"); if (hj) hj.onclick = () => { closeAllMenus(); exportHistoryFormat("json"); };
+  const hmd = $("#histExpMd"); if (hmd) hmd.onclick = () => { closeAllMenus(); exportHistoryFormat("md"); };
+  const htx = $("#histExpTxt"); if (htx) htx.onclick = () => { closeAllMenus(); exportHistoryFormat("txt"); };
+
+  /* v1.1 · import cronologia */
+  const histImpBtn = $("#histImpBtn");
+  if (histImpBtn) histImpBtn.onclick = () => $("#histImpFile").click();
+  const histImpFile = $("#histImpFile");
+  if (histImpFile) histImpFile.onchange = (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (f) importHistoryFile(f);
+  };
+
+  /* v1.1 · backup impostazioni */
+  const setExpBtn = $("#setExpBtn");
+  if (setExpBtn) setExpBtn.onclick = (e) => {
+    e.stopPropagation();
+    const was = !$("#setExpMenu").hidden;
+    closeAllMenus();
+    if (!was) { $("#setExpMenu").hidden = false; setExpBtn.setAttribute("aria-expanded", "true"); }
+  };
+  const setSafe = $("#setExpSafe");
+  if (setSafe) setSafe.onclick = () => {
+    closeAllMenus();
+    downloadFile("soundscript-impostazioni-" + fileStamp() + "-sicuro.json", JSON.stringify(buildSettingsBackup(false), null, 2), "application/json");
+    stat("Backup sicuro scaricato (senza chiavi API).", 100);
+    announce("Backup impostazioni sicuro scaricato.");
+  };
+  const setFull = $("#setExpFull");
+  if (setFull) setFull.onclick = () => {
+    closeAllMenus();
+    downloadFile("soundscript-impostazioni-" + fileStamp() + "-completo.json", JSON.stringify(buildSettingsBackup(true), null, 2), "application/json");
+    stat("Backup COMPLETO scaricato: contiene le chiavi API, non condividerlo.", 100);
+    announce("Backup completo scaricato. Contiene chiavi API: non condividerlo.");
+  };
+  const setImpBtn = $("#setImpBtn");
+  if (setImpBtn) setImpBtn.onclick = () => $("#setImpFile").click();
+  const setImpFile = $("#setImpFile");
+  if (setImpFile) setImpFile.onchange = (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (f) importSettingsFile(f);
+  };
 
   /* Annulla / Nuovo / Testa chiave */
   const cb = $("#cancelBtn"); if (cb) cb.onclick = () => { if (abortCtrl) abortCtrl.abort(); };
   const nb = $("#newBtn"); if (nb) nb.onclick = resetSession;
   const tk = $("#testKeyBtn"); if (tk) tk.onclick = testApiKey;
 
-  /* Export wiring */
+  /* Export trascrizione wiring */
   const exBtn = $("#exportBtn");
   if (exBtn) exBtn.onclick = (e) => {
     e.stopPropagation();
-    const m = $("#exportMenu");
-    m.hidden = !m.hidden;
-    exBtn.setAttribute("aria-expanded", String(!m.hidden));
+    const was = !$("#exportMenu").hidden;
+    closeAllMenus();
+    if (!was) { $("#exportMenu").hidden = false; exBtn.setAttribute("aria-expanded", "true"); }
   };
   const exTxt = $("#expTxt");
   if (exTxt) exTxt.onclick = () => {
-    closeExportMenu();
+    closeAllMenus();
     downloadFile("soundscript-" + fileStamp() + ".txt", buildTXT(), "text/plain;charset=utf-8");
     stat("File TXT scaricato.", 100);
     announce("File di testo scaricato.");
   };
   const exMd = $("#expMd");
   if (exMd) exMd.onclick = () => {
-    closeExportMenu();
+    closeAllMenus();
     downloadFile("soundscript-" + fileStamp() + ".md", buildMD(), "text/markdown;charset=utf-8");
     stat("File Markdown scaricato.", 100);
     announce("File Markdown scaricato.");
   };
   const exPdf = $("#expPdf");
   if (exPdf) exPdf.onclick = () => {
-    closeExportMenu();
+    closeAllMenus();
     ensurePrintView().innerHTML = buildDocHTML();
     window.print();
     announce("Dialogo di stampa aperto.");
@@ -1571,7 +1776,7 @@ function render() {
     t.custom = e.target.value;
     saveSettings({ tldr: t });
     syncTldrUi();
-    queueDraft(); /* le istruzioni custom non fanno parte del draft testo, ma non disturbano */
+    queueDraft();
   };
   $("#savePreset").onclick = () => {
     const name = $("#presetName").value.trim();
@@ -1682,9 +1887,9 @@ function render() {
   renderPresets();
   renderHistory();
   renderStatusBadges();
-  restoreDraft(); /* 1new: ripristina testo/riepilogo dopo un reload */
+  restoreDraft();
   loadShared();
-  handleShortcutAction(); /* Lotto C: esegui le scorciatoie dal manifest */
+  handleShortcutAction();
 }
 
 function fullText() {
